@@ -5,6 +5,6 @@ export default defineConfig({
   out: './lib/db/migrations',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'file:./data/swagbot.db',
+    url: process.env.DATABASE_URL || 'file:./data/swaggbot.db',
   },
 });

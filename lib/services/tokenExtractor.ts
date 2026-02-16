@@ -7,7 +7,7 @@ export interface TokenExtractionResult {
 
 /**
  * Service for extracting authentication tokens from API responses
- * Ported from SwagBot v1 (Express) to v2 (Next.js)
+ * Ported from Swaggbot v1 (Express) to v2 (Next.js)
  * 
  * This service provides multiple extraction strategies:
  * 1. LLM-provided specific path (highest priority)

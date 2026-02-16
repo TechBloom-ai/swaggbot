@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SwagBot - API Assistant",
+  title: "Swaggbot - API Assistant",
   description: "Transform Swagger/OpenAPI documentation into conversational interfaces",
 };
 

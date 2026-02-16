@@ -7,7 +7,7 @@ let client: Client | null = null;
 
 export function getDbClient(): Client {
   if (!client) {
-    const databaseUrl = process.env.DATABASE_URL || 'file:./data/swagbot.db';
+    const databaseUrl = process.env.DATABASE_URL || 'file:./data/swaggbot.db';
     
     client = createClient({
       url: databaseUrl,

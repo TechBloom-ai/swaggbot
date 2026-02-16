@@ -1,4 +1,4 @@
-# SwagBot: Visual Identity Guidelines
+# Swaggbot: Visual Identity Guidelines
 
 **Version 1.0** | Last Updated: February 2026
 
@@ -19,7 +19,7 @@
 
 ## 1. Brand Concept & Logo Rationale
 
-The SwagBot logo represents the intersection of **structured hardware** and **fluid data**. The symbol is a stylized letter "S" formed by two distinct visual languages:
+The Swaggbot logo represents the intersection of **structured hardware** and **fluid data**. The symbol is a stylized letter "S" formed by two distinct visual languages:
 
 ### The Circuitry (Left/Top)
 Represents the physical, hardware, and connection aspect of the bot. It uses clean lines, nodes, and traces to suggest logic and pathways—the foundation of computational thinking.

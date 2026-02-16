@@ -1,13 +1,13 @@
 version: '3.8'
 
 services:
-  swagbot:
+  swaggbot:
     build: .
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/swagbot.db
+      - DATABASE_URL=file:/app/data/swaggbot.db
       - LLM_PROVIDER=${LLM_PROVIDER:-moonshot}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
       - MOONSHOT_MODEL=${MOONSHOT_MODEL:-kimi-k2.5}

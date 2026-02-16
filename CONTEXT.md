@@ -1,8 +1,8 @@
-# SwagBot v2 - Open Source Architecture
+# Swaggbot v2 - Open Source Architecture
 
 ## Vision
 
-SwagBot is an open-source, self-hosted tool that transforms Swagger/OpenAPI documentation into conversational interfaces. Built with Next.js, it provides both a web UI and MCP (Model Context Protocol) server for seamless integration with local AI assistants like Claude Desktop, Cursor, and others.
+Swaggbot is an open-source, self-hosted tool that transforms Swagger/OpenAPI documentation into conversational interfaces. Built with Next.js, it provides both a web UI and MCP (Model Context Protocol) server for seamless integration with local AI assistants like Claude Desktop, Cursor, and others.
 
 **Philosophy**: Local-first, single-user, simple to deploy. If you have access to a Swagger doc, you can explore and interact with that API naturally through chat.
 
@@ -93,14 +93,14 @@ GET    /api/config           // Get current configuration
 
 ### 3. MCP Server (Model Context Protocol)
 
-**Purpose**: Enable local AI assistants (Claude Desktop, Cursor, etc.) to interact with SwagBot
+**Purpose**: Enable local AI assistants (Claude Desktop, Cursor, etc.) to interact with Swaggbot
 
 **MCP Resources**:
 ```typescript
 // Sessions
-resource://swagbot/sessions              // List all sessions
-resource://swagbot/session/{id}          // Get specific session
-resource://swagbot/session/{id}/swagger  // Get session's Swagger doc
+resource://swaggbot/sessions              // List all sessions
+resource://swaggbot/session/{id}          // Get specific session
+resource://swaggbot/session/{id}/swagger  // Get session's Swagger doc
 
 
 ```
@@ -108,40 +108,40 @@ resource://swagbot/session/{id}/swagger  // Get session's Swagger doc
 **MCP Tools**:
 ```typescript
 // Session Management
-tool: swagbot_create_session
+tool: swaggbot_create_session
   - input: { swaggerUrl: string, name?: string }
   - output: { sessionId, name, swaggerUrl }
 
-tool: swagbot_list_sessions
+tool: swaggbot_list_sessions
   - input: {}
   - output: { sessions: [...] }
 
-tool: swagbot_delete_session
+tool: swaggbot_delete_session
   - input: { sessionId: string }
   - output: { success: boolean }
 
 // Chat
-tool: swagbot_chat
+tool: swaggbot_chat
   - input: { sessionId: string, message: string }
   - output: { response, curl?, executed?, result? }
 
 // Workflow
-tool: swagbot_create_workflow
+tool: swaggbot_create_workflow
   - input: { sessionId: string, description: string }
   - output: { workflowId, steps: [...] }
 
-tool: swagbot_execute_workflow
+tool: swaggbot_execute_workflow
   - input: { workflowId: string }
   - output: { success, steps: [...], summary }
 ```
 
 **MCP Prompts**:
 ```typescript
-prompt: swagbot_explore_api
+prompt: swaggbot_explore_api
   - description: "Help me explore this API"
   - arguments: { sessionId: string }
   
-prompt: swagbot_common_tasks
+prompt: swaggbot_common_tasks
   - description: "What can I do with this API?"
   - arguments: { sessionId: string }
 ```
@@ -228,7 +228,7 @@ interface Setting {
 
 ### Overview
 
-SwagBot uses a centralized prompt management system to ensure consistent LLM interactions. All prompts are defined in `PROMPTS.md` and loaded at runtime by the LLM providers.
+Swaggbot uses a centralized prompt management system to ensure consistent LLM interactions. All prompts are defined in `PROMPTS.md` and loaded at runtime by the LLM providers.
 
 ### Prompt Structure
 
@@ -525,7 +525,7 @@ OLLAMA_MODEL=llama3.1
 ## Project Structure
 
 ```
-swagbot/
+swaggbot/
 ├── app/                          # Next.js App Router
 │   ├── page.tsx                  # Landing page
 │   ├── layout.tsx                # Root layout
@@ -656,8 +656,8 @@ swagbot/
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/swagbot.git
-cd swagbot
+git clone https://github.com/yourusername/swaggbot.git
+cd swaggbot
 
 # Install dependencies
 npm install
@@ -679,8 +679,8 @@ npm run dev
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/swagbot.git
-cd swagbot
+git clone https://github.com/yourusername/swaggbot.git
+cd swaggbot
 
 # Copy and edit environment
 cp .env.example .env
@@ -697,13 +697,13 @@ docker-compose up -d
 version: '3.8'
 
 services:
-  swagbot:
+  swaggbot:
     build: .
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/swagbot.db
+      - DATABASE_URL=file:/app/data/swaggbot.db
       - LLM_PROVIDER=${LLM_PROVIDER:-moonshot}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
     volumes:
@@ -715,7 +715,7 @@ services:
 
 ## MCP Configuration
 
-To use SwagBot with Claude Desktop or other MCP clients:
+To use Swaggbot with Claude Desktop or other MCP clients:
 
 ### Claude Desktop
 
@@ -724,11 +724,11 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "swagbot": {
+    "swaggbot": {
       "command": "npx",
-      "args": ["-y", "swagbot-mcp"],
+      "args": ["-y", "swaggbot-mcp"],
       "env": {
-        "SWAGBOT_API_URL": "http://localhost:3000"
+        "SwaggbOT_API_URL": "http://localhost:3000"
       }
     }
   }
@@ -740,11 +740,11 @@ Or if running locally from source:
 ```json
 {
   "mcpServers": {
-    "swagbot": {
+    "swaggbot": {
       "command": "node",
-      "args": ["/path/to/swagbot/scripts/mcp-server.ts"],
+      "args": ["/path/to/swaggbot/scripts/mcp-server.ts"],
       "env": {
-        "DATABASE_URL": "file:/path/to/swagbot/data/swagbot.db",
+        "DATABASE_URL": "file:/path/to/swaggbot/data/swaggbot.db",
         "LLM_PROVIDER": "moonshot",
         "MOONSHOT_API_KEY": "sk-your-key"
       }
@@ -760,11 +760,11 @@ Add to Cursor settings:
 ```json
 {
   "mcpServers": {
-    "swagbot": {
+    "swaggbot": {
       "command": "npx",
-      "args": ["-y", "swagbot-mcp"],
+      "args": ["-y", "swaggbot-mcp"],
       "env": {
-        "SWAGBOT_API_URL": "http://localhost:3000"
+        "SwaggbOT_API_URL": "http://localhost:3000"
       }
     }
   }
@@ -787,10 +787,10 @@ Add to Cursor settings:
 User: Can you help me explore the Petstore API?
 
 Claude: I'll help you explore the Petstore API. Let me create a session first.
-[Uses swagbot_create_session tool]
+[Uses swaggbot_create_session tool]
 
 Great! I've created a session. Now let me see what endpoints are available.
-[Uses swagbot_chat tool with message "list all available endpoints"]
+[Uses swaggbot_chat tool with message "list all available endpoints"]
 
 The Petstore API has these main endpoints:
 - GET /pet/{petId} - Find pet by ID
@@ -827,7 +827,7 @@ curl -X POST http://localhost:3000/api/chat \
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `DATABASE_URL` | SQLite database URL | No | `file:./data/swagbot.db` |
+| `DATABASE_URL` | SQLite database URL | No | `file:./data/swaggbot.db` |
 | `LLM_PROVIDER` | Primary LLM provider | No | `moonshot` |
 | `MOONSHOT_API_KEY` | Moonshot API key | If using Moonshot | - |
 | `MOONSHOT_MODEL` | Moonshot model | No | `kimi-k2.5` |
@@ -846,7 +846,7 @@ curl -X POST http://localhost:3000/api/chat \
 
 ### Automatic Cleanup Strategy
 
-To prevent the database from growing indefinitely, SwagBot includes automatic cleanup policies:
+To prevent the database from growing indefinitely, Swaggbot includes automatic cleanup policies:
 
 **Default Cleanup Rules:**
 - **Sessions**: Auto-delete after 30 days of inactivity (`lastAccessedAt`)

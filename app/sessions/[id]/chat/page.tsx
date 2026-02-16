@@ -152,7 +152,7 @@ export default function ChatPage() {
             </div>
           </div>
           <div className="flex items-center">
-            <span className="font-bold text-[var(--color-circuit-green)]">Swag</span>
+            <span className="font-bold text-[var(--color-circuit-green)]">Swagg</span>
             <span className="font-bold text-[var(--color-logic-navy)]">Bot</span>
           </div>
         </div>
@@ -165,7 +165,7 @@ export default function ChatPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Bot className="h-16 w-16 text-[var(--color-circuit-green)]" />
               <h2 className="mt-4 text-xl font-semibold text-[white]">
-                Welcome to SwagBot
+                Welcome to Swaggbot
               </h2>
               <p className="mt-2 max-w-md text-[var(--color-text-secondary)]">
                 I can help you explore and interact with this API. Try asking me things like:

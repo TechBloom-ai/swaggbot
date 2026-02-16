@@ -19,7 +19,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV DATABASE_URL=file:/app/data/swagbot.db
+ENV DATABASE_URL=file:/app/data/swaggbot.db
 
 # Install pnpm
 RUN npm install -g pnpm

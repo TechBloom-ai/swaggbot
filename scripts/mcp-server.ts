@@ -14,7 +14,7 @@ import { chatService } from "../lib/services/chat.js";
 // Initialize MCP Server
 const server = new Server(
   {
-    name: "swagbot",
+    name: "swaggbot",
     version: "1.0.0",
   },
   {
@@ -31,7 +31,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "swagbot_create_session",
+        name: "swaggbot_create_session",
         description: "Create a new API session from a Swagger/OpenAPI URL",
         inputSchema: {
           type: "object",
@@ -49,7 +49,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "swagbot_list_sessions",
+        name: "swaggbot_list_sessions",
         description: "List all available API sessions",
         inputSchema: {
           type: "object",
@@ -57,7 +57,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "swagbot_delete_session",
+        name: "swaggbot_delete_session",
         description: "Delete an API session",
         inputSchema: {
           type: "object",
@@ -71,8 +71,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "swagbot_chat",
-        description: "Send a message to SwagBot to interact with an API",
+        name: "swaggbot_chat",
+        description: "Send a message to Swaggbot to interact with an API",
         inputSchema: {
           type: "object",
           properties: {
@@ -98,7 +98,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case "swagbot_create_session": {
+      case "swaggbot_create_session": {
         const { name, swaggerUrl } = args as { name: string; swaggerUrl: string };
         const session = await sessionService.create({ name, swaggerUrl });
         return {
@@ -111,14 +111,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "swagbot_list_sessions": {
+      case "swaggbot_list_sessions": {
         const sessions = await sessionService.findAll();
         if (sessions.length === 0) {
           return {
             content: [
               {
                 type: "text",
-                text: "No sessions found. Create one with swagbot_create_session.",
+                text: "No sessions found. Create one with swaggbot_create_session.",
               },
             ],
           };
@@ -136,7 +136,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "swagbot_delete_session": {
+      case "swaggbot_delete_session": {
         const { sessionId } = args as { sessionId: string };
         await sessionService.delete(sessionId);
         return {
@@ -149,7 +149,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "swagbot_chat": {
+      case "swaggbot_chat": {
         const { sessionId, message } = args as { sessionId: string; message: string };
         const response = await chatService.processMessage({ sessionId, message });
         
@@ -207,7 +207,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
     resources: [
       {
-        uri: "swagbot://sessions",
+        uri: "swaggbot://sessions",
         name: "API Sessions",
         mimeType: "application/json",
         description: "List of all configured API sessions",
@@ -220,7 +220,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const { uri } = request.params;
 
-  if (uri === "swagbot://sessions") {
+  if (uri === "swaggbot://sessions") {
     const sessions = await sessionService.findAll();
     return {
       contents: [
@@ -234,7 +234,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
 
   // Handle session-specific resources
-  const sessionMatch = uri.match(/^swagbot:\/\/session\/([^/]+)(?:\/swagger)?$/);
+  const sessionMatch = uri.match(/^swaggbot:\/\/session\/([^/]+)(?:\/swagger)?$/);
   if (sessionMatch) {
     const sessionId = sessionMatch[1];
     const session = await sessionService.findById(sessionId);
@@ -274,7 +274,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
   return {
     prompts: [
       {
-        name: "swagbot_explore_api",
+        name: "swaggbot_explore_api",
         description: "Help me explore this API",
         arguments: [
           {
@@ -285,7 +285,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
         ],
       },
       {
-        name: "swagbot_common_tasks",
+        name: "swaggbot_common_tasks",
         description: "What can I do with this API?",
         arguments: [
           {
@@ -304,7 +304,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   switch (name) {
-    case "swagbot_explore_api": {
+    case "swaggbot_explore_api": {
       const { sessionId } = args as { sessionId: string };
       const session = await sessionService.findById(sessionId);
       
@@ -327,7 +327,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       };
     }
 
-    case "swagbot_common_tasks": {
+    case "swaggbot_common_tasks": {
       const { sessionId } = args as { sessionId: string };
       const session = await sessionService.findById(sessionId);
       
@@ -357,7 +357,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("SwagBot MCP Server running on stdio");
+  console.error("Swaggbot MCP Server running on stdio");
 }
 
 main().catch((error) => {

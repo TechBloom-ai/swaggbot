@@ -8,7 +8,7 @@ export interface PromptTemplate {
 }
 
 // Default system prompt when file loading fails
-const DEFAULT_SYSTEM_PROMPT = `You are SwagBot, an AI assistant that helps users explore and interact with APIs based on their Swagger/OpenAPI documentation.
+const DEFAULT_SYSTEM_PROMPT = `You are Swaggbot, an AI assistant that helps users explore and interact with APIs based on their Swagger/OpenAPI documentation.
 
 Your role is to:
 1. Help users understand what endpoints are available

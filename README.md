@@ -1,6 +1,6 @@
-# SwagBot
+# Swaggbot
 
-Transform Swagger/OpenAPI documentation into conversational interfaces. SwagBot is an open-source, self-hosted tool that lets you explore and interact with APIs through natural language chat.
+Transform Swagger/OpenAPI documentation into conversational interfaces. Swaggbot is an open-source, self-hosted tool that lets you explore and interact with APIs through natural language chat.
 
 **Philosophy**: Local-first, single-user, simple to deploy. If you have access to a Swagger doc, you can explore and interact with that API naturally through chat.
 
@@ -24,8 +24,8 @@ Transform Swagger/OpenAPI documentation into conversational interfaces. SwagBot 
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/swagbot.git
-cd swagbot
+git clone https://github.com/yourusername/swaggbot.git
+cd swaggbot
 
 # Install dependencies
 npm install
@@ -44,8 +44,8 @@ npm run dev
 ### Option 2: Docker (Recommended)
 
 ```bash
-git clone https://github.com/yourusername/swagbot.git
-cd swagbot
+git clone https://github.com/yourusername/swaggbot.git
+cd swaggbot
 
 cp .env.example .env
 # Edit .env with your API keys
@@ -69,7 +69,7 @@ Access the web UI at http://localhost:3000
 Example:
 ```
 You: "List all users"
-SwagBot: "I'll fetch all users for you. [Executes GET /users] Here are the results..."
+Swaggbot: "I'll fetch all users for you. [Executes GET /users] Here are the results..."
 ```
 
 ### MCP with Claude Desktop
@@ -79,11 +79,11 @@ Add to your Claude Desktop configuration:
 ```json
 {
   "mcpServers": {
-    "swagbot": {
+    "swaggbot": {
       "command": "npx",
-      "args": ["-y", "swagbot-mcp"],
+      "args": ["-y", "swaggbot-mcp"],
       "env": {
-        "SWAGBOT_API_URL": "http://localhost:3000"
+        "SwaggbOT_API_URL": "http://localhost:3000"
       }
     }
   }
@@ -93,7 +93,7 @@ Add to your Claude Desktop configuration:
 Then in Claude:
 ```
 You: Help me explore the Petstore API
-Claude: I'll create a SwagBot session for the Petstore API and help you explore it...
+Claude: I'll create a Swaggbot session for the Petstore API and help you explore it...
 ```
 
 ### API Usage
@@ -122,7 +122,7 @@ curl -X POST http://localhost:3000/api/chat \
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `DATABASE_URL` | SQLite database path | No (default: `file:./data/swagbot.db`) |
+| `DATABASE_URL` | SQLite database path | No (default: `file:./data/swaggbot.db`) |
 | `LLM_PROVIDER` | Provider: `openai`, `anthropic`, `moonshot`, `ollama` | No (default: `moonshot`) |
 | `OPENAI_API_KEY` | OpenAI API key | If using OpenAI |
 | `ANTHROPIC_API_KEY` | Anthropic API key | If using Claude |
@@ -133,7 +133,7 @@ See `.env.example` for all available options.
 
 ## Architecture
 
-SwagBot is built with a modern, modular architecture:
+Swaggbot is built with a modern, modular architecture:
 
 - **Next.js 14+** - Full-stack framework with App Router
 - **libSQL (Turso)** - SQLite-compatible database, edge-ready
@@ -160,7 +160,7 @@ SwagBot is built with a modern, modular architecture:
 ## Project Structure
 
 ```
-swagbot/
+swaggbot/
 ├── app/                 # Next.js App Router
 │   ├── (dashboard)/     # Dashboard UI routes
 │   └── api/             # API routes

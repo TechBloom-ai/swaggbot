@@ -97,7 +97,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold">
-                <span className="text-[var(--color-circuit-green)]">Swag</span>
+                <span className="text-[var(--color-circuit-green)]">Swagg</span>
                 <span className="text-[var(--color-logic-navy)]">Bot</span>
               </h1>
             </div>
