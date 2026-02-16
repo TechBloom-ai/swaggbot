@@ -341,6 +341,46 @@ Guidelines for workflow planning:
 - Include validation steps where appropriate
 - Plan for rollback if possible
 
+**Advanced - Array Filtering and Search:**
+
+When you need to find a specific item in an array response (e.g., "find collaborator named Mauricio Henrique"):
+
+Use the bracket filter syntax: `[field=value].path`
+
+Examples:
+- `[name=Mauricio Henrique].id` - Find item where name="Mauricio Henrique", return the id field
+- `[email=john@test.com].phone` - Find item where email="john@test.com", return the phone field
+- `[status=active].id` - Find first active item, return its id
+
+**How it works:**
+1. The system searches through the array for items matching the filter criteria
+2. Matching is case-insensitive ("mauricio" matches "Mauricio")
+3. If ONE match found: returns the extracted value directly
+4. If MULTIPLE matches found: returns an array of values
+5. If NO match found: extraction fails
+
+**Usage in extractFields:**
+```json
+{
+  "stepNumber": 1,
+  "description": "Find collaborator Mauricio Henrique",
+  "action": { "endpoint": "/collaborators", "method": "GET" },
+  "extractFields": ["[name=Mauricio Henrique].id"]
+}
+```
+
+**Usage in subsequent steps:**
+```json
+{
+  "stepNumber": 2,
+  "description": "Get details for found collaborator",
+  "action": {
+    "endpoint": "/collaborator/{{[name=Mauricio Henrique].id}}",
+    "method": "GET"
+  }
+}
+```
+
 **IMPORTANT - Authentication:**
 {{authStatus}}
 
@@ -492,6 +532,36 @@ Response:
   "estimatedTotalSteps": 2
 }
 
+**Example - Finding Specific Item by Name (Array Filtering):**
+User: "Get all collaborators, find Mauricio Henrique, and get his details"
+Response:
+{
+  "workflowName": "Find and Retrieve Specific Collaborator",
+  "description": "Retrieves all collaborators, finds Mauricio Henrique by name, and fetches his detailed information",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Retrieve all collaborators to find Mauricio Henrique",
+      "action": {
+        "endpoint": "/collaborators",
+        "method": "GET",
+        "purpose": "Get all collaborators to search for specific person"
+      },
+      "extractFields": ["[name=Mauricio Henrique].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Fetch detailed information for Mauricio Henrique",
+      "action": {
+        "endpoint": "/collaborator/{{[name=Mauricio Henrique].id}}",
+        "method": "GET",
+        "purpose": "Get detailed collaborator data using the found ID"
+      }
+    }
+  ],
+  "estimatedTotalSteps": 2
+}
+
 **IMPORTANT INSTRUCTION:** Return ONLY the JSON object above. Do not include any markdown code blocks (no ```json or ```), explanations, or additional text before or after the JSON. The response must be valid JSON that can be parsed directly.
 
 ---
@@ -550,6 +620,7 @@ Response format (JSON):
 }
 
 Use dot notation for nested fields (e.g., "data.id", "user.profile.name").
+Use bracket notation for array filtering (e.g., "[name=Mauricio Henrique].id", "[email=test@example.com].phone").
 If a field is not found, include it in the "missing" array.
 
 ---

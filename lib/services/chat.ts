@@ -481,7 +481,9 @@ export class ChatService {
           // Replace placeholders in endpoint with extracted data
           let endpoint = step.action.endpoint;
           for (const [key, value] of Object.entries(extractedData)) {
-            endpoint = endpoint.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value));
+            // Escape special regex characters in the key for filter syntax
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            endpoint = endpoint.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g'), String(value));
           }
 
           // Build curl command
@@ -679,16 +681,27 @@ export class ChatService {
             // Extract data for future steps
             if (step.extractFields && step.extractFields.length > 0) {
               for (const field of step.extractFields) {
-                // Check if field is an array index path like "0.id" or "[0].id"
-                const arrayIndexMatch = field.match(/^(\[?(\d+)\]?)\.(.+)$/);
-
-                if (arrayIndexMatch) {
-                  // Extract using the path (e.g., "0.id" or "[0].id" means first array item's id property)
-                  const [, , index, propPath] = arrayIndexMatch;
+                // First, check if field uses filter syntax (e.g., "[name=Mauricio Henrique].id")
+                const filterMatch = field.match(/^\[([^=]+)=([^\]]+)\](?:\.(.*))?$/);
+                
+                if (filterMatch) {
+                  // Filter syntax extraction
+                  // Store using the filter pattern as the key so it matches the placeholder
+                  const value = this.extractFieldFromResponse(executionResult.response, field);
+                  if (value !== undefined) {
+                    // Use the filter pattern itself as the storage key
+                    extractedData[field] = value;
+                    // Also store with step-specific key
+                    extractedData[`step${step.stepNumber}_${field}`] = value;
+                    console.log(`[ChatService] Step ${step.stepNumber} extracted ${field} as ${field}:`, value);
+                  }
+                } else if (field.match(/^(\[?(\d+)\]?)\.(.+)$/)) {
+                  // Array index path like "0.id" or "[0].id"
+                  const arrayIndexMatch = field.match(/^(\[?(\d+)\]?)\.(.+)$/);
+                  const [, , index, propPath] = arrayIndexMatch!;
                   const value = this.extractFieldFromResponse(executionResult.response, field);
 
                   // Generate a unique storage key from the step description
-                  // E.g., if step is "Fetch payment methods", use "payment_method_id"
                   let storageKey: string;
                   const semanticField = this.extractSemanticFieldName(step.description);
                   
@@ -700,10 +713,8 @@ export class ChatService {
                   }
 
                   // Store with step-specific key to prevent overwriting
-                  // Use step number in the array notation key to make it unique per step
                   if (value !== undefined) {
                     extractedData[storageKey] = value;
-                    // Store with step-specific array notation keys to prevent overwriting between steps
                     const stepSpecificKey = `step${step.stepNumber}_${index}_${propPath}`;
                     extractedData[stepSpecificKey] = value;
                     extractedData[`step${step.stepNumber}_${field}`] = value;
@@ -783,6 +794,13 @@ export class ChatService {
   private extractFieldFromResponse(response: unknown, field: string): unknown {
     if (!response || typeof response !== 'object') return undefined;
 
+    // Check for filter syntax: [field=value].path or [field=value]
+    const filterMatch = field.match(/^\[([^=]+)=([^\]]+)\](?:\.(.*))?$/);
+    if (filterMatch) {
+      const [, filterField, filterValue, extractPath] = filterMatch;
+      return this.extractFromFilteredArray(response, filterField, filterValue, extractPath);
+    }
+
     const parts = field.split('.');
     let current: unknown = response;
 
@@ -799,6 +817,62 @@ export class ChatService {
     }
 
     return current;
+  }
+
+  /**
+   * Extract values from array by filtering on a field value
+   * Supports case-insensitive matching
+   * Returns single value if one match, array if multiple matches
+   */
+  private extractFromFilteredArray(
+    response: unknown,
+    filterField: string,
+    filterValue: string,
+    extractPath?: string
+  ): unknown {
+    if (!Array.isArray(response)) {
+      console.log(`[ChatService] Filter response is not an array:`, typeof response);
+      return undefined;
+    }
+
+    console.log(`[ChatService] Filtering array by ${filterField}=${filterValue}, extractPath=${extractPath || 'none'}`);
+
+    // Find all matching items (case-insensitive)
+    const matches = response.filter(item => {
+      if (item && typeof item === 'object') {
+        const itemValue = (item as Record<string, unknown>)[filterField];
+        const itemStr = String(itemValue || '').toLowerCase();
+        const filterStr = filterValue.toLowerCase();
+        return itemStr === filterStr;
+      }
+      return false;
+    });
+
+    console.log(`[ChatService] Found ${matches.length} matches for ${filterField}=${filterValue}`);
+
+    if (matches.length === 0) {
+      return undefined;
+    }
+
+    // Extract the specified field from each match
+    const extractField = (item: unknown): unknown => {
+      if (!extractPath) {
+        return item;
+      }
+      return this.extractFieldFromResponse(item, extractPath);
+    };
+
+    if (matches.length === 1) {
+      // Single match - return the extracted value directly
+      const result = extractField(matches[0]);
+      console.log(`[ChatService] Single match extracted:`, result);
+      return result;
+    } else {
+      // Multiple matches - return array of extracted values
+      const results = matches.map(extractField);
+      console.log(`[ChatService] Multiple matches extracted:`, results.length, 'items');
+      return results;
+    }
   }
 
   /**
