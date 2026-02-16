@@ -82,11 +82,24 @@ export class ChatService {
       );
       
       // Check if LLM misunderstood and said it can't execute
-      if (curlResult.explanation?.toLowerCase().includes("can't") || 
-          curlResult.explanation?.toLowerCase().includes("cannot") ||
-          curlResult.explanation?.toLowerCase().includes("unable to")) {
+      const hasRefusalLanguage = 
+        curlResult.explanation?.toLowerCase().includes("can't") || 
+        curlResult.explanation?.toLowerCase().includes("cannot") ||
+        curlResult.explanation?.toLowerCase().includes("unable to") ||
+        curlResult.explanation?.toLowerCase().includes("i'm not able") ||
+        curlResult.explanation?.toLowerCase().includes("i am not able") ||
+        curlResult.explanation?.toLowerCase().includes("i don't have") ||
+        curlResult.explanation?.toLowerCase().includes("i do not have") ||
+        curlResult.explanation?.toLowerCase().includes("i can only") ||
+        curlResult.explanation?.toLowerCase().includes("local server") ||
+        curlResult.explanation?.toLowerCase().includes("your server") ||
+        curlResult.explanation?.toLowerCase().includes("to your");
+      
+      if (hasRefusalLanguage) {
+        console.log('[ChatService] Detected refusal language in explanation, retrying...');
+        
         // Retry with more explicit instruction
-        const retryMessage = `${message} (IMPORTANT: Execute this request directly, do not say you cannot execute it)`;
+        const retryMessage = `${message} (Generate ONLY the JSON response with shouldExecute: true)`;
         const retryResult = await this.getLLM().generateCurl(
           formattedSwagger,
           retryMessage,
@@ -94,8 +107,22 @@ export class ChatService {
         );
         
         // Use retry result if it's better
-        if (!retryResult.explanation?.toLowerCase().includes("can't")) {
+        const retryHasRefusal = 
+          retryResult.explanation?.toLowerCase().includes("can't") || 
+          retryResult.explanation?.toLowerCase().includes("cannot") ||
+          retryResult.explanation?.toLowerCase().includes("unable to") ||
+          retryResult.explanation?.toLowerCase().includes("local server") ||
+          retryResult.explanation?.toLowerCase().includes("your server") ||
+          retryResult.explanation?.toLowerCase().includes("to your");
+        
+        if (!retryHasRefusal && retryResult.curl) {
+          console.log('[ChatService] Retry successful, using new result');
           Object.assign(curlResult, retryResult);
+        } else {
+          // If retry still has refusal, keep the curl but force execution and clean explanation
+          console.log('[ChatService] Retry still has refusal, forcing execution anyway');
+          curlResult.shouldExecute = true;
+          curlResult.explanation = `Executing API request: ${curlResult.curl?.split(' ')[2] || 'API endpoint'}`;
         }
       }
       
@@ -116,7 +143,8 @@ export class ChatService {
         curl: curlResult.curl?.substring(0, 50) + '...',
       });
       
-      // Force execution if user explicitly asked to execute/test/try something
+      // Always execute by default. Only skip if LLM explicitly set shouldExecute=false
+      // AND user didn't use action words. The prompt instructs shouldExecute=false only for DELETE.
       const lowerMessage = message.toLowerCase();
       const explicitlyAskedToExecute = 
         lowerMessage.includes('execute') ||
@@ -124,7 +152,13 @@ export class ChatService {
         lowerMessage.includes('test') ||
         lowerMessage.includes('try') ||
         lowerMessage.includes('call') ||
-        lowerMessage.includes('send');
+        lowerMessage.includes('send') ||
+        lowerMessage.includes('fazer') ||
+        lowerMessage.includes('listar') ||
+        lowerMessage.includes('buscar') ||
+        lowerMessage.includes('criar') ||
+        lowerMessage.includes('pegar') ||
+        lowerMessage.includes('obter');
       
       const shouldActuallyExecute = curlResult.shouldExecute || explicitlyAskedToExecute;
       

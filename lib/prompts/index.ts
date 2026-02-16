@@ -72,14 +72,26 @@ class PromptManager {
   }
   
   private parsePromptFromMarkdown(content: string, name: string): PromptTemplate | null {
-    // Simple markdown parser for prompts
-    // Looks for ### {name} or ## {name} headers
-    const headerRegex = new RegExp(`^(?:###|##)\\s*\\d*\\.?\\s*${this.escapeRegex(name)}[^\\n]*\\n\\s*\\n?([\\s\\S]*?)(?=\\n^(?:###|##)\\s*\\d*\\.?\\s*|$)`, 'im');
-    const match = content.match(headerRegex);
+    // Split document by --- horizontal rules (each prompt section is separated by ---)
+    const sections = content.split(/^---$/m);
     
-    if (!match) return null;
+    const escapedName = this.escapeRegex(name);
+    const headerRegex = new RegExp(`^(?:###|##)\\s*\\d*\\.?\\s*${escapedName}\\s*$`, 'im');
     
-    const template = match[1].trim();
+    // Find the section that contains the header matching the prompt name
+    let matchedSection: string | null = null;
+    for (const section of sections) {
+      if (headerRegex.test(section)) {
+        matchedSection = section;
+        break;
+      }
+    }
+    
+    if (!matchedSection) return null;
+    
+    // Remove the header line itself, keep everything after it
+    const headerLineRegex = new RegExp(`^(?:###|##)\\s*\\d*\\.?\\s*${escapedName}[^\\n]*\\n`, 'im');
+    const template = matchedSection.replace(headerLineRegex, '').trim();
     
     // Extract variable names from {{variable}} patterns
     const variableRegex = /\{\{(\w+)\}\}/g;

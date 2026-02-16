@@ -91,10 +91,13 @@ export function validateCurlCommand(curl: string): { valid: boolean; error?: str
     return { valid: false, error: 'Command must start with "curl"' };
   }
   
-  // Check for dangerous flags
+  // Check for dangerous flags (match as standalone flags, not as substrings of other values)
   const dangerousFlags = ['--upload-file', '-T', '--output', '-o'];
   for (const flag of dangerousFlags) {
-    if (curl.includes(flag)) {
+    // Match the flag only when it appears as a standalone argument:
+    // preceded by start-of-string or whitespace, followed by end-of-string or whitespace
+    const flagRegex = new RegExp(`(?:^|\\s)${flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
+    if (flagRegex.test(curl)) {
       return { 
         valid: false, 
         error: `Potentially dangerous flag detected: ${flag}` 

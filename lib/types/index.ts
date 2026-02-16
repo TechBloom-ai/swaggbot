@@ -17,6 +17,8 @@ export interface CurlGenerationResult {
   note?: string;
   executed?: boolean;
   result?: unknown;
+  missingFields?: string[]; // Fields that are required but not provided
+  hasPlaceholders?: boolean; // Whether the curl contains placeholder values
 }
 
 // API information result
@@ -69,10 +71,11 @@ export interface WorkflowStep {
     endpoint: string;
     method: string;
     purpose: string;
+    body?: Record<string, unknown>;
+    parameters?: Record<string, unknown>;
   };
   extractFields?: string[];
   notes?: string;
-  body?: Record<string, unknown>;
 }
 
 // Workflow plan result

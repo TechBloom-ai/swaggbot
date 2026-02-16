@@ -77,9 +77,13 @@ export class MoonshotProvider extends BaseLLMProvider {
     const systemPromptTemplate = promptManager.loadPrompt('curl-generation-system');
     const userPromptTemplate = promptManager.loadPrompt('curl-generation-user');
     
+    const authMessage = authToken 
+      ? `User has provided token: ${authToken}`
+      : 'No token set. Mention if endpoint requires auth.';
+    
     const systemPrompt = promptManager.render(systemPromptTemplate.template, {
       swaggerDoc,
-      authToken: authToken || null,
+      authToken: authMessage,
     });
     
     const userPrompt = promptManager.render(userPromptTemplate.template, {
@@ -99,12 +103,12 @@ export class MoonshotProvider extends BaseLLMProvider {
     
     const result = parsed as Record<string, unknown>;
     
-    // Handle shouldExecute - LLM might return it as string "true" or boolean true
-    let shouldExecute = false;
+    // Handle shouldExecute - default to true (only false for DELETE requests per prompt rules)
+    let shouldExecute = true;
     if (typeof result.shouldExecute === 'boolean') {
       shouldExecute = result.shouldExecute;
     } else if (typeof result.shouldExecute === 'string') {
-      shouldExecute = result.shouldExecute.toLowerCase() === 'true';
+      shouldExecute = result.shouldExecute.toLowerCase() !== 'false';
     }
     
     // Handle isAuthEndpoint similarly
