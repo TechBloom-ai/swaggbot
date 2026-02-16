@@ -300,7 +300,7 @@ async classifyIntent(userMessage: string): Promise<IntentClassification> {
       { role: 'system', content: promptManager.loadPrompt('system-main').template },
       { role: 'user', content: renderedPrompt }
     ],
-    temperature: 0.3  // Low temperature for consistent classification
+    temperature: 1
   });
   
   return JSON.parse(response);
@@ -336,7 +336,7 @@ async generateCurl(
   
   const response = await this.llm.complete({
     messages,
-    temperature: 0.7  // Balanced creativity and consistency
+    temperature: 1
   });
   
   return this.parseResponse(response);
@@ -361,7 +361,7 @@ async planWorkflow(
     messages: [
       { role: 'system', content: prompt.template }
     ],
-    temperature: 0.5  // Some creativity for planning
+    temperature: 1
   });
   
   return JSON.parse(response).steps;
@@ -415,11 +415,11 @@ Standard variables available across prompts:
 
 | Task | Temperature | Reason |
 |------|-------------|---------|
-| Intent Classification | 0.3 | Consistent, predictable |
-| Curl Generation | 0.7 | Balanced creativity |
-| Workflow Planning | 0.5 | Some creativity needed |
-| Data Extraction | 0.2 | Precise, structured |
-| API Info Response | 0.7 | Natural language |
+| Intent Classification | 1 | Consistent, predictable |
+| Curl Generation | 1 | Balanced creativity |
+| Workflow Planning | 1 | Some creativity needed |
+| Data Extraction | 1 | Precise, structured |
+| API Info Response | 1 | Natural language |
 
 ### Testing Prompts
 
