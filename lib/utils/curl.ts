@@ -42,6 +42,7 @@ export async function executeCurl(curlCommand: string, timeout = 30000): Promise
       stderr: stderr || '',
       exitCode: 0,
       response,
+      httpCode,
     };
   } catch (error) {
     const err = error as Error & { code?: number; killed?: boolean };
@@ -51,6 +52,7 @@ export async function executeCurl(curlCommand: string, timeout = 30000): Promise
       stdout: '',
       stderr: err.message || 'Command execution failed',
       exitCode: err.code || 1,
+      httpCode: 0,
     };
   }
 }

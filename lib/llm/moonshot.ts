@@ -46,18 +46,27 @@ export class MoonshotProvider extends BaseLLMProvider {
   }
   
   private async makeRequest(messages: LLMMessage[]): Promise<string> {
+    const bodyPayload = {
+      model: this.model,
+      messages,
+      temperature: this.config.temperature,
+      max_tokens: this.config.maxTokens,
+    };
+    
+    console.log('[MoonshotProvider] API Request:', {
+      model: this.model,
+      messageCount: messages.length,
+      totalChars: messages.reduce((sum, m) => sum + m.content.length, 0),
+      maxTokens: this.config.maxTokens,
+    });
+    
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature: this.config.temperature,
-        max_tokens: this.config.maxTokens,
-      }),
+      body: JSON.stringify(bodyPayload),
     });
     
     if (!response.ok) {
@@ -66,7 +75,15 @@ export class MoonshotProvider extends BaseLLMProvider {
     }
     
     const data: MoonshotResponse = await response.json();
-    return data.choices[0]?.message?.content || '';
+    const content = data.choices[0]?.message?.content || '';
+    
+    console.log('[MoonshotProvider] API Response:', {
+      contentLength: content.length,
+      finishReason: data.choices[0]?.finish_reason,
+      usage: data.usage,
+    });
+    
+    return content;
   }
   
   async generateCurl(
@@ -169,27 +186,51 @@ export class MoonshotProvider extends BaseLLMProvider {
     };
   }
   
-  async planWorkflow(swaggerDoc: string, request: string): Promise<WorkflowStep[]> {
+  async planWorkflow(swaggerDoc: string, request: string, authToken?: string): Promise<WorkflowStep[]> {
     const promptTemplate = promptManager.loadPrompt('workflow-planning');
     
     const prompt = promptManager.render(promptTemplate.template, {
       swaggerDoc,
       userMessage: request,
+      authStatus: authToken ? 'User already has a valid authentication token. DO NOT include authentication steps in the workflow.' : 'No authentication token available. Include authentication as first step if needed.',
     });
+    
+    console.log('[MoonshotProvider] Planning workflow, prompt length:', prompt.length);
+    
+    // Temporarily increase max tokens for workflow planning
+    const originalMaxTokens = this.config.maxTokens;
+    this.config.maxTokens = 8000;
     
     const response = await this.makeRequest([
       { role: 'system', content: promptManager.getSystemPrompt() },
       { role: 'user', content: prompt },
     ]);
     
+    // Restore original max tokens
+    this.config.maxTokens = originalMaxTokens;
+    
+    console.log('[MoonshotProvider] Raw workflow response:', response.substring(0, 500));
+    
     const parsed = this.safeJsonParse(response);
     
     if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Invalid workflow plan format');
+      console.error('[MoonshotProvider] Failed to parse workflow response:', response);
+      throw new Error(`Invalid workflow plan format: ${response.substring(0, 200)}`);
     }
     
     const result = parsed as Record<string, unknown>;
-    const steps = result.steps as WorkflowStep[] || [];
+    
+    if (!result.steps) {
+      console.error('[MoonshotProvider] Missing steps in workflow plan:', result);
+      throw new Error('Workflow plan missing required "steps" field');
+    }
+    
+    const steps = result.steps as WorkflowStep[];
+    
+    if (!Array.isArray(steps)) {
+      console.error('[MoonshotProvider] Steps is not an array:', steps);
+      throw new Error('Workflow steps must be an array');
+    }
     
     return steps;
   }

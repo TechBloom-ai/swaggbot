@@ -32,7 +32,8 @@ export abstract class BaseLLMProvider {
   // Plan a multi-step workflow
   abstract planWorkflow(
     swaggerDoc: string,
-    request: string
+    request: string,
+    authToken?: string
   ): Promise<WorkflowStep[]>;
   
   // Extract data from API response
@@ -52,6 +53,16 @@ export abstract class BaseLLMProvider {
       const jsonText = jsonMatch ? jsonMatch[1].trim() : text.trim();
       return JSON.parse(jsonText);
     } catch {
+      // Try more aggressive extraction - look for JSON-like content
+      try {
+        // Find content between first { and last }
+        const jsonLikeMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonLikeMatch) {
+          return JSON.parse(jsonLikeMatch[0]);
+        }
+      } catch {
+        // Still failed, return null
+      }
       return null;
     }
   }

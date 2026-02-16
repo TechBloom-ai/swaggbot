@@ -306,6 +306,9 @@ API Documentation:
 
 User request: "{{userMessage}}"
 
+Authentication Status:
+{{authStatus}}
+
 Plan a workflow that:
 1. Identifies all necessary API calls
 2. Orders them correctly (respecting dependencies)
@@ -335,17 +338,69 @@ Response format (JSON):
 Guidelines for workflow planning:
 - If creating resources, fetch dependencies first (e.g., get valid role_id before creating user with role)
 - Extract IDs and tokens from responses to use in later steps
-- Consider authentication as first step if needed
 - Include validation steps where appropriate
 - Plan for rollback if possible
 
-**CRITICAL - Resource Creation with Foreign Keys:**
-When user wants to CREATE a resource but mentions "mock", "fake", "example", "use any valid", or provides incomplete data for foreign key fields:
-1. First identify ALL required foreign key fields (fields ending in "_id" like role_id, payment_method_id, department_id, etc.)
-2. Add steps BEFORE the creation step to fetch valid references for these foreign keys
-3. Extract the IDs from those references
-4. Use those extracted real IDs in the creation step
-5. NEVER use made-up or random UUIDs - only use real IDs from the API
+**IMPORTANT - Authentication:**
+{{authStatus}}
+
+**CRITICAL - YOU MUST FOLLOW THESE RULES EXACTLY:**
+
+When user wants to CREATE a resource (POST request):
+
+1. **Find the POST endpoint** in the API documentation
+2. **Look at "Request Body" > "Fields" section**
+3. **For EVERY field ending in "_id" that is marked as (REQUIRED) or [FOREIGN KEY]:**
+   - This is a FOREIGN KEY dependency
+   - You MUST create a separate step BEFORE the POST to fetch this ID
+   - NEVER skip foreign key fetching steps
+   - NEVER assume the field is optional if it has "_id" suffix
+
+4. **If user says "mock", "fake", "example", "use any valid", or provides incomplete data:**
+   - Fetch ALL required foreign key IDs first
+   - Use real extracted IDs from the API
+   - NEVER use placeholder values like "string" or "uuid"
+
+**⚠️ MANDATORY CHECK:** Before responding, verify:
+- Did you identify ALL fields ending in "_id" in the POST body?
+- Are any of those fields marked as (REQUIRED) or [FOREIGN KEY]?
+- Did you create GET steps to fetch each one?
+- If YES to any above, you MUST include those GET steps!
+
+**Example - Creating Patient (MANDATORY STEPS):**
+API shows POST /patient requires:
+- name: string (REQUIRED)
+- type_service_id: string (REQUIRED) [FOREIGN KEY] ← THIS IS REQUIRED!
+
+WRONG (will fail):
+```json
+{
+  "steps": [{
+    "stepNumber": 1,
+    "description": "Create patient",
+    "action": { "endpoint": "/patient", "method": "POST", "purpose": "Create patient" }
+  }]
+}
+```
+
+CORRECT:
+```json
+{
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Fetch type services to get valid type_service_id",
+      "action": { "endpoint": "/type-services", "method": "GET", "purpose": "Get type_service_id" },
+      "extractFields": ["0.id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Create patient with extracted type_service_id",
+      "action": { "endpoint": "/patient", "method": "POST", "purpose": "Create patient with valid foreign key" }
+    }
+  ]
+}
+```
 
 **Example - Creating with Mock Data and Dependencies:**
 User: "Create a collaborator named Felipe Rocha, mock the rest"
@@ -356,92 +411,52 @@ Steps needed:
 4. GET /professional_areas - extract first area ID
 5. POST /collaborator with real extracted IDs + mock data for other fields
 
-**Example - Creating Collaborator with Mock Data:**
-User: "Create a collaborator named Felipe Rocha, mock the rest"
+**Example - Creating Patient with Foreign Key:**
+User: "Create a patient called Mauricio Henrique, mock the rest"
+API Docs show POST /patient requires:
+- name: string (REQUIRED)
+- email: string (REQUIRED)
+- type_service_id: string (REQUIRED) [FOREIGN KEY]
+
 Response:
 {
-  "workflowName": "Create Collaborator with Mock Data",
-  "description": "Fetches required foreign key references and creates a collaborator with mock data",
+  "workflowName": "Create Patient with Mock Data",
+  "description": "Fetches type_service_id and creates patient with mock data",
   "steps": [
     {
       "stepNumber": 1,
-      "description": "Fetch payment methods to get a valid payment_method_id",
+      "description": "Fetch type services to get a valid type_service_id",
       "action": {
-        "endpoint": "/payment-methods",
+        "endpoint": "/type-services",
         "method": "GET",
-        "purpose": "Get valid payment method reference"
+        "purpose": "Get valid type service reference"
       },
-      "extractFields": ["payment_method_id"]
+      "extractFields": ["type_service_id"]
     },
     {
       "stepNumber": 2,
-      "description": "Fetch roles to get a valid role_id",
+      "description": "Create patient with name Mauricio Henrique and extracted type_service_id",
       "action": {
-        "endpoint": "/roles",
-        "method": "GET",
-        "purpose": "Get valid role reference"
-      },
-      "extractFields": ["role_id"]
-    },
-    {
-      "stepNumber": 3,
-      "description": "Fetch employment relationships to get a valid employment_relationship_id",
-      "action": {
-        "endpoint": "/employment_relationships",
-        "method": "GET",
-        "purpose": "Get valid employment relationship reference"
-      },
-      "extractFields": ["employment_relationship_id"]
-    },
-    {
-      "stepNumber": 4,
-      "description": "Fetch professional areas to get a valid professional_area_id",
-      "action": {
-        "endpoint": "/professional_areas",
-        "method": "GET",
-        "purpose": "Get valid professional area reference"
-      },
-      "extractFields": ["professional_area_id"]
-    },
-    {
-      "stepNumber": 5,
-      "description": "Create collaborator with real foreign key IDs and mock data for other fields",
-      "action": {
-        "endpoint": "/collaborator",
+        "endpoint": "/patient",
         "method": "POST",
-        "purpose": "Create new collaborator",
+        "purpose": "Create new patient",
         "body": {
-          "name": "Felipe Rocha",
-          "email": "felipe.rocha@example.com",
+          "name": "Mauricio Henrique",
+          "email": "mauricio.henrique@example.com",
           "phone": "11987654321",
-          "password": "SecurePass123",
           "document": "52998224725",
-          "registration_number": "123456",
-          "professional_registration": "CRM-123456",
-          "pix": "felipe@pix.com",
-          "agency": "0001",
-          "account": "123456-7",
-          "bank": "Banco do Brasil",
-          "reference_value": 150,
-          "payment_method_id": "{{payment_method_id}}",
-          "role_id": "{{role_id}}",
-          "employment_relationship_id": "{{employment_relationship_id}}",
-          "professional_area_id": "{{professional_area_id}}"
+          "type_service_id": "{{type_service_id}}"
         }
       },
       "extractFields": ["id"]
     }
   ],
-  "estimatedTotalSteps": 5
-}
-      },
-      "extractFields": ["id"]
-    }
-  ],
-  "estimatedTotalSteps": 5
+  "estimatedTotalSteps": 2
 }
 
-**Example - Simple Two-Step Workflow:**
+---
+
+## token-extraction
 User: "Create a user with admin role"
 Response:
 {
@@ -476,6 +491,8 @@ Response:
   ],
   "estimatedTotalSteps": 2
 }
+
+**IMPORTANT INSTRUCTION:** Return ONLY the JSON object above. Do not include any markdown code blocks (no ```json or ```), explanations, or additional text before or after the JSON. The response must be valid JSON that can be parsed directly.
 
 ---
 

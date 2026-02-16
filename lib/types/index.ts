@@ -128,6 +128,7 @@ export interface ExecutionResult {
   stderr: string;
   exitCode: number;
   response?: unknown;
+  httpCode?: number;
 }
 
 // LLM Message format

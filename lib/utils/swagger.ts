@@ -84,18 +84,22 @@ export function formatSwaggerForLLM(doc: SwaggerDoc): string {
           }
         }
         
-        // Request body
+        // Request body with schema details
         if (op.requestBody) {
           const rb = op.requestBody as Record<string, unknown>;
           lines.push('Request Body:');
           if (rb.description) {
-            lines.push(`  ${rb.description}`);
-          }
-          if (rb.content) {
-            lines.push(`  Content-Type: ${Object.keys(rb.content).join(', ')}`);
+            lines.push(`  Description: ${rb.description}`);
           }
           if (rb.required) {
             lines.push('  Required: Yes');
+          }
+          
+          // Extract schema details
+          const schema = extractRequestBodySchema(rb, doc);
+          if (schema) {
+            lines.push('  Fields:');
+            formatSchemaFields(schema, lines, '    ');
           }
         }
         
@@ -122,4 +126,90 @@ function getParameterType(param: Record<string, unknown>): string {
     return (param.schema as Record<string, unknown>).type as string || 'string';
   }
   return 'string';
+}
+
+function extractRequestBodySchema(
+  requestBody: Record<string, unknown>,
+  doc: SwaggerDoc
+): Record<string, unknown> | null {
+  if (!requestBody.content) return null;
+  
+  const content = requestBody.content as Record<string, unknown>;
+  const jsonContent = content['application/json'] || content['application/json; charset=utf-8'];
+  
+  if (!jsonContent || typeof jsonContent !== 'object') return null;
+  
+  const schema = (jsonContent as Record<string, unknown>).schema;
+  if (!schema || typeof schema !== 'object') return null;
+  
+  // If schema has $ref, resolve it
+  const schemaObj = schema as Record<string, unknown>;
+  if (schemaObj.$ref && typeof schemaObj.$ref === 'string') {
+    return resolveRef(schemaObj.$ref, doc);
+  }
+  
+  return schemaObj;
+}
+
+function resolveRef(ref: string, doc: SwaggerDoc): Record<string, unknown> | null {
+  // Handle #/components/schemas/Name or #/definitions/Name
+  const parts = ref.replace('#/', '').split('/');
+  let current: unknown = doc;
+  
+  for (const part of parts) {
+    if (current && typeof current === 'object') {
+      current = (current as Record<string, unknown>)[part];
+    } else {
+      return null;
+    }
+  }
+  
+  return current as Record<string, unknown>;
+}
+
+function formatSchemaFields(
+  schema: Record<string, unknown>,
+  lines: string[],
+  indent: string
+): void {
+  const properties = schema.properties as Record<string, unknown> | undefined;
+  const required = (schema.required as string[]) || [];
+  
+  if (!properties) return;
+  
+  for (const [fieldName, fieldSchema] of Object.entries(properties)) {
+    if (typeof fieldSchema !== 'object' || fieldSchema === null) continue;
+    
+    const field = fieldSchema as Record<string, unknown>;
+    const isRequired = required.includes(fieldName);
+    const fieldType = field.type || 'unknown';
+    const isForeignKey = fieldName.endsWith('_id');
+    
+    let fieldDesc = `${fieldName}: ${fieldType}`;
+    if (isRequired) fieldDesc += ' (REQUIRED)';
+    if (isForeignKey) fieldDesc += ' [FOREIGN KEY]';
+    
+    lines.push(`${indent}- ${fieldDesc}`);
+    
+    if (field.description) {
+      lines.push(`${indent}  Description: ${field.description}`);
+    }
+    
+    // Handle nested objects
+    if (fieldType === 'object' && field.properties) {
+      lines.push(`${indent}  Nested fields:`);
+      formatSchemaFields(field, lines, `${indent}    `);
+    }
+    
+    // Handle arrays with items
+    if (fieldType === 'array' && field.items && typeof field.items === 'object') {
+      const items = field.items as Record<string, unknown>;
+      if (items.$ref) {
+        lines.push(`${indent}  Array of referenced objects`);
+      } else if (items.properties) {
+        lines.push(`${indent}  Array items:`);
+        formatSchemaFields(items, lines, `${indent}    `);
+      }
+    }
+  }
 }

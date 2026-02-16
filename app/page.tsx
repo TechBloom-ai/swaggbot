@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, MessageSquare, Trash2, Bot } from "lucide-react";
+import { TechBloomBanner } from "./sessions/TechBloomBanner";
 
 interface Session {
   id: string;
@@ -90,7 +91,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
+    <div className="flex min-h-screen flex-col bg-[var(--color-background)]">
       {/* Header */}
       <header className="border-b border-[var(--color-border)] bg-white">
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
@@ -113,7 +114,7 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <main className="mx-auto flex-1 max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-[white]">
             Your Sessions
@@ -235,6 +236,10 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <footer className="">
+        <TechBloomBanner/>
+      </footer>
     </div>
   );
 }
