@@ -6,6 +6,17 @@ export interface IntentClassification {
   estimatedSteps?: number;
 }
 
+// Message metadata for storing additional information
+export interface MessageMetadata {
+  type?: 'curl' | 'api_info' | 'error' | 'workflow';
+  curl?: string;
+  executed?: boolean;
+  result?: unknown;
+  error?: string;
+  workflowId?: string;
+  workflowStep?: number;
+}
+
 // Curl generation result with execution info
 export interface CurlGenerationResult {
   type: 'curl_command';
@@ -19,6 +30,7 @@ export interface CurlGenerationResult {
   result?: unknown;
   missingFields?: string[]; // Fields that are required but not provided
   hasPlaceholders?: boolean; // Whether the curl contains placeholder values
+  messageId?: string; // Reference to saved message
 }
 
 // API information result

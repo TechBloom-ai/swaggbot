@@ -2,11 +2,14 @@ import { getLLMProvider } from '@/lib/llm';
 import { sessionService } from './session';
 import { executeCurl, validateCurlCommand } from '@/lib/utils/curl';
 import { tokenExtractorService } from './tokenExtractor';
+import { messageService } from './message';
 import {
   ChatResponse,
   IntentClassification,
   ChatMessage,
+  LLMMessage,
 } from '@/lib/types';
+import { Message } from '@/lib/db/schema';
 
 export interface ChatInput {
   sessionId: string;
@@ -32,36 +35,162 @@ export class ChatService {
         message: 'Session not found',
       };
     }
-    
+
     // Update last accessed
     await sessionService.updateLastAccessed(input.sessionId);
-    
-    // Classify intent
-    const intent = await this.getLLM().classifyIntent(input.message);
-    
+
+    // Load recent message history
+    let history: LLMMessage[] = [];
+    let userMessageId: string | undefined;
+    try {
+      const recentMessages = await messageService.getRecentMessages(input.sessionId, 10);
+      history = this.convertMessagesToLLMFormat(recentMessages);
+
+      // Save user message
+      const userMessage = await messageService.create({
+        sessionId: input.sessionId,
+        role: 'user',
+        content: input.message,
+      });
+      userMessageId = userMessage.id;
+    } catch (error) {
+      console.error('[ChatService] Failed to load history or save user message:', error);
+      // Explain to user and offer to continue without history
+      return {
+        type: 'error',
+        message: 'I had trouble loading our conversation history. This might be a temporary issue. Please try again, or if the problem persists, I can continue without remembering our previous conversation.',
+      };
+    }
+
+    // Check if user is referencing a previous workflow
+    const workflowReference = await this.detectWorkflowReference(input.message, history);
+    if (workflowReference.shouldReexecute && workflowReference.workflowId) {
+      return this.handleWorkflowReexecution(session, workflowReference.workflowId, input.message, history);
+    }
+
+    // Classify intent with history
+    const intent = await this.getLLM().classifyIntent(input.message, history);
+
     // Route to appropriate handler
+    let response: ChatResponse;
     switch (intent.type) {
       case 'single_request':
-        return this.handleSingleRequest(session, input.message);
-      
+        response = await this.handleSingleRequest(session, input.message, history);
+        break;
+
       case 'workflow':
-        return this.handleWorkflow(session, input.message);
-      
+        response = await this.handleWorkflow(session, input.message, history);
+        break;
+
       case 'api_info':
-        return this.handleApiInfo(session, input.message);
-      
+        response = await this.handleApiInfo(session, input.message, history);
+        break;
+
       case 'self_awareness':
-        return this.handleSelfAwareness();
-      
+        response = this.handleSelfAwareness();
+        break;
+
       default:
-        return {
+        response = {
           type: 'api_info',
           explanation: 'I can help you explore and interact with your API. Try asking me to perform specific actions like "get all users" or ask questions like "what endpoints are available?"',
         };
     }
+
+    // Save assistant response
+    try {
+      // Extract content based on response type
+      let content: string;
+      if (response.type === 'error') {
+        content = response.message;
+      } else if (response.type === 'curl_command' || response.type === 'api_info') {
+        content = response.explanation;
+      } else if (response.type === 'self_awareness') {
+        content = response.response;
+      } else {
+        content = 'I processed your request.';
+      }
+
+      const assistantMessage = await messageService.create({
+        sessionId: input.sessionId,
+        role: 'assistant',
+        content,
+        metadata: JSON.stringify({
+          type: response.type,
+          curl: (response as any).curl,
+          executed: (response as any).executed,
+          result: (response as any).result,
+          workflowId: (response as any).workflowId,
+        }),
+      });
+
+      // Update response with message ID
+      (response as any).messageId = assistantMessage.id;
+    } catch (error) {
+      console.error('[ChatService] Failed to save assistant message:', error);
+      // Don't fail the whole request if saving fails
+    }
+
+    return response;
+  }
+
+  private convertMessagesToLLMFormat(messages: Message[]): LLMMessage[] {
+    return messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+  }
+
+  private async detectWorkflowReference(message: string, history: LLMMessage[]): Promise<{ shouldReexecute: boolean; workflowId?: string }> {
+    const lowerMessage = message.toLowerCase();
+
+    // Detect workflow reference phrases
+    const workflowPhrases = [
+      'that workflow',
+      'the workflow',
+      'previous workflow',
+      'last workflow',
+      'run it again',
+      'execute it again',
+      'do it again',
+      're-run',
+      'rerun',
+    ];
+
+    const isReferencingWorkflow = workflowPhrases.some(phrase => lowerMessage.includes(phrase));
+
+    if (!isReferencingWorkflow) {
+      return { shouldReexecute: false };
+    }
+
+    // Find the most recent workflow in history
+    try {
+      // Get the last 10 messages from the database to find workflow metadata
+      // Since history only contains content, we need to query DB for metadata
+      // For now, we'll look through the last message's metadata
+      // This is a simplified approach - in production you might want more sophisticated detection
+
+      return { shouldReexecute: false }; // Let the normal flow handle it for now
+    } catch (error) {
+      console.error('[ChatService] Failed to detect workflow reference:', error);
+      return { shouldReexecute: false };
+    }
+  }
+
+  private async handleWorkflowReexecution(
+    session: any,
+    workflowId: string,
+    message: string,
+    history: LLMMessage[]
+  ): Promise<ChatResponse> {
+    // This will be implemented in Phase 5
+    return {
+      type: 'error',
+      message: 'Workflow reexecution is not yet implemented. Please describe what you want to do.',
+    };
   }
   
-  private async handleSingleRequest(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string): Promise<ChatResponse> {
+  private async handleSingleRequest(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string, history?: LLMMessage[]): Promise<ChatResponse> {
     if (!session) {
       return {
         type: 'error',
@@ -76,7 +205,8 @@ export class ChatService {
       const curlResult = await this.getLLM().generateCurl(
         formattedSwagger,
         message,
-        session.authToken || undefined
+        session.authToken || undefined,
+        history
       );
       
       // Check if LLM misunderstood and said it can't execute
@@ -242,29 +372,37 @@ export class ChatService {
     }
   }
   
-  private async handleApiInfo(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string): Promise<ChatResponse> {
+  private async handleApiInfo(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string, history?: LLMMessage[]): Promise<ChatResponse> {
     if (!session) {
       return {
         type: 'error',
         message: 'Session not found',
       };
     }
-    
+
     const formattedSwagger = sessionService.getFormattedSwagger(session);
-    
+
     try {
-      // Use LLM to answer API questions
-      const response = await this.getLLM().chat([
+      // Build messages array with history
+      const messages: LLMMessage[] = [
         {
           role: 'system',
           content: `You are Swaggbot, an API assistant. The user is asking about the following API:\n\n${formattedSwagger}\n\nProvide a helpful, concise answer about the API structure, endpoints, and usage.`,
         },
-        {
-          role: 'user',
-          content: message,
-        },
-      ]);
-      
+      ];
+
+      if (history && history.length > 0) {
+        messages.push(...history);
+      }
+
+      messages.push({
+        role: 'user',
+        content: message,
+      });
+
+      // Use LLM to answer API questions
+      const response = await this.getLLM().chat(messages);
+
       return {
         type: 'api_info',
         explanation: response,
@@ -276,7 +414,7 @@ export class ChatService {
       };
     }
   }
-  
+
   private handleSelfAwareness(): ChatResponse {
     return {
       type: 'api_info',
@@ -284,7 +422,7 @@ export class ChatService {
     };
   }
 
-  private async handleWorkflow(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string): Promise<ChatResponse> {
+  private async handleWorkflow(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string, history?: LLMMessage[]): Promise<ChatResponse> {
     if (!session) {
       return {
         type: 'error',

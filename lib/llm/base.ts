@@ -23,11 +23,12 @@ export abstract class BaseLLMProvider {
   abstract generateCurl(
     swaggerDoc: string,
     message: string,
-    authToken?: string
+    authToken?: string,
+    history?: LLMMessage[]
   ): Promise<CurlGenerationResult>;
   
   // Classify user intent
-  abstract classifyIntent(message: string): Promise<IntentClassification>;
+  abstract classifyIntent(message: string, history?: LLMMessage[]): Promise<IntentClassification>;
   
   // Plan a multi-step workflow
   abstract planWorkflow(

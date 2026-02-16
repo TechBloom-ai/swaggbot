@@ -89,7 +89,8 @@ export class MoonshotProvider extends BaseLLMProvider {
   async generateCurl(
     swaggerDoc: string,
     message: string,
-    authToken?: string
+    authToken?: string,
+    history?: LLMMessage[]
   ): Promise<CurlGenerationResult> {
     const systemPromptTemplate = promptManager.loadPrompt('curl-generation-system');
     const userPromptTemplate = promptManager.loadPrompt('curl-generation-user');
@@ -107,10 +108,18 @@ export class MoonshotProvider extends BaseLLMProvider {
       userMessage: message,
     });
     
-    const response = await this.makeRequest([
+    // Build messages array with history if provided
+    const messages: LLMMessage[] = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ]);
+    ];
+    
+    if (history && history.length > 0) {
+      messages.push(...history);
+    }
+    
+    messages.push({ role: 'user', content: userPrompt });
+    
+    const response = await this.makeRequest(messages);
     
     const parsed = this.safeJsonParse(response);
     
@@ -153,17 +162,25 @@ export class MoonshotProvider extends BaseLLMProvider {
     };
   }
   
-  async classifyIntent(message: string): Promise<IntentClassification> {
+  async classifyIntent(message: string, history?: LLMMessage[]): Promise<IntentClassification> {
     const promptTemplate = promptManager.loadPrompt('intent-classification');
     
     const prompt = promptManager.render(promptTemplate.template, {
       userMessage: message,
     });
     
-    const response = await this.makeRequest([
+    // Build messages array with history if provided
+    const messages: LLMMessage[] = [
       { role: 'system', content: promptManager.getSystemPrompt() },
-      { role: 'user', content: prompt },
-    ]);
+    ];
+    
+    if (history && history.length > 0) {
+      messages.push(...history);
+    }
+    
+    messages.push({ role: 'user', content: prompt });
+    
+    const response = await this.makeRequest(messages);
     
     const parsed = this.safeJsonParse(response);
     

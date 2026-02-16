@@ -53,9 +53,23 @@ export const settings = sqliteTable('settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Messages table - stores chat conversation history
+export const messages = sqliteTable('messages', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id')
+    .notNull()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+  content: text('content').notNull(),
+  workflowId: text('workflow_id').references(() => workflows.id, { onDelete: 'set null' }),
+  metadata: text('metadata'), // JSON: type, curl, executed, result, workflowId, etc.
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Define relations
 export const sessionsRelations = relations(sessions, ({ many }) => ({
   workflows: many(workflows),
+  messages: many(messages),
 }));
 
 export const workflowsRelations = relations(workflows, ({ one, many }) => ({
@@ -73,6 +87,17 @@ export const workflowExecutionsRelations = relations(workflowExecutions, ({ one 
   }),
 }));
 
+export const messagesRelations = relations(messages, ({ one }) => ({
+  session: one(sessions, {
+    fields: [messages.sessionId],
+    references: [sessions.id],
+  }),
+  workflow: one(workflows, {
+    fields: [messages.workflowId],
+    references: [workflows.id],
+  }),
+}));
+
 // Type exports
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
@@ -85,3 +110,6 @@ export type NewWorkflowExecution = typeof workflowExecutions.$inferInsert;
 
 export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
+
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;

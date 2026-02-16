@@ -38,12 +38,14 @@ export default function ChatPage() {
   const allMessages = useChatStore((state) => state.messages);
   const messages = allMessages[sessionId] || [];
   const addMessage = useChatStore((state) => state.addMessage);
-  
+  const loadMessages = useChatStore((state) => state.loadMessages);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch session details
+  // Fetch session details and message history
   useEffect(() => {
     fetchSession();
+    loadMessageHistory();
   }, [sessionId]);
 
   // Scroll to bottom on new messages
@@ -65,6 +67,26 @@ export default function ChatPage() {
       router.push("/");
     } finally {
       setIsLoadingSession(false);
+    }
+  };
+
+  const loadMessageHistory = async () => {
+    try {
+      const response = await fetch(`/api/chat?sessionId=${sessionId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.messages && data.messages.length > 0) {
+          // Parse metadata from JSON strings
+          const parsedMessages = data.messages.map((msg: any) => ({
+            ...msg,
+            metadata: msg.metadata ? JSON.parse(msg.metadata) : undefined,
+          }));
+          loadMessages(sessionId, parsedMessages);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load message history:", error);
+      // Don't show error to user, just continue without history
     }
   };
 
