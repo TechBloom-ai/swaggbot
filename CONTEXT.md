@@ -951,11 +951,11 @@ lib/db/migrations/
 - [x] Mobile responsiveness improvements
 
 ### Phase 3: Session Management UI
-- [ ] Session detail page with metadata display
-- [ ] Edit session name and description
-- [ ] Auth token management UI (view, update, delete)
-- [ ] Swagger doc explorer/viewer
-- [ ] Session statistics (request count, last used)
+- [x] Session detail page with metadata display
+- [x] Edit session name and description
+- [x] Auth token management UI (view, update, delete)
+- [x] Swagger doc explorer/viewer
+- [x] Session statistics (request count, last used)
 
 ### Phase 4: Settings Page (Minimal)
 - [ ] Database cleanup utilities

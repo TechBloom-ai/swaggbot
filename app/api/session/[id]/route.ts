@@ -11,6 +11,8 @@ import {
 import { log } from '@/lib/logger';
 
 const updateSessionSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  swaggerUrl: z.string().url().optional(),
   authToken: z.string().nullable().optional(),
 });
 
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// PATCH /api/session/[id] - Update session (e.g., auth token)
+// PATCH /api/session/[id] - Update session
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -70,14 +72,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       throw new NotFoundError('Session', id);
     }
 
-    // Update auth token if provided
-    if (validation.data.authToken !== undefined) {
-      const session = await sessionService.updateAuthToken(id, validation.data.authToken);
-      log.info('Session auth token updated', { sessionId: id });
-      return createSuccessResponse({ session });
-    }
+    // Update session
+    const session = await sessionService.update(id, validation.data);
+    log.info('Session updated', { sessionId: id });
 
-    return createSuccessResponse({ session: existingSession });
+    return createSuccessResponse({ session });
   } catch (error) {
     log.error('Failed to update session', error, { route: 'PATCH /api/session/[id]' });
     return handleApiError(error);

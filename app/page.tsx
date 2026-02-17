@@ -162,8 +162,7 @@ export default function Home() {
             {sessions.map(session => (
               <div
                 key={session.id}
-                onClick={() => router.push(`/sessions/${session.id}/chat`)}
-                className='group cursor-pointer rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-6 shadow-sm transition-all hover:border-[var(--color-circuit-green)] hover:shadow-md'
+                className='group rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-6 shadow-sm transition-all hover:border-[var(--color-circuit-green)] hover:shadow-md'
               >
                 <div className='flex items-start justify-between'>
                   <div className='flex items-center gap-3 min-w-0'>
@@ -190,6 +189,20 @@ export default function Home() {
                 <p className='mt-3 truncate text-sm text-[var(--color-text-secondary)]'>
                   {session.swaggerUrl}
                 </p>
+                <div className='mt-4 flex gap-2'>
+                  <button
+                    onClick={() => router.push(`/sessions/${session.id}/chat`)}
+                    className='flex-1 rounded-lg bg-[var(--color-circuit-green)] px-3 py-2 text-sm text-white transition-colors hover:bg-[var(--color-circuit-green-dark)]'
+                  >
+                    Open Chat
+                  </button>
+                  <button
+                    onClick={() => router.push(`/sessions/${session.id}`)}
+                    className='rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'
+                  >
+                    Details
+                  </button>
+                </div>
               </div>
             ))}
           </div>
