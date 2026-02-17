@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, MessageSquare, Trash2, Bot } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, Bot, Settings } from 'lucide-react';
 
 import { SessionListSkeleton, EmptyState, Spinner } from '@/components/ui';
 import { toast } from '@/stores/toastStore';
@@ -124,14 +124,23 @@ export default function Home() {
                 <span className='text-[var(--color-logic-navy)]'>Bot</span>
               </h1>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className='flex items-center justify-center gap-2 rounded-lg bg-[var(--color-circuit-green)] px-4 py-2 text-white transition-colors hover:bg-[var(--color-circuit-green-dark)] w-full sm:w-auto'
-            >
-              <Plus className='h-4 w-4' />
-              <span className='sm:hidden'>New Session</span>
-              <span className='hidden sm:inline'>New Session</span>
-            </button>
+            <div className='flex gap-2'>
+              <button
+                onClick={() => router.push('/settings')}
+                className='flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-4 py-2 text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'
+                aria-label='Settings'
+              >
+                <Settings className='h-4 w-4' />
+                <span className='hidden sm:inline'>Settings</span>
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className='flex items-center justify-center gap-2 rounded-lg bg-[var(--color-circuit-green)] px-4 py-2 text-white transition-colors hover:bg-[var(--color-circuit-green-dark)]'
+              >
+                <Plus className='h-4 w-4' />
+                <span className='hidden sm:inline'>New Session</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>

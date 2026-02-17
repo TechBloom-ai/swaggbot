@@ -958,8 +958,8 @@ lib/db/migrations/
 - [x] Session statistics (request count, last used)
 
 ### Phase 4: Settings Page (Minimal)
-- [ ] Database cleanup utilities
-- [ ] Application info and version
+- [x] Database cleanup utilities
+- [x] Application info and version
 
 ### Phase 5: Workflow API Routes
 - [ ] `POST /api/workflow` - Create workflow from natural language
