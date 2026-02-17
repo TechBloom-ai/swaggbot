@@ -969,10 +969,8 @@ lib/db/migrations/
 - [x] Workflow execution history endpoint
 
 ### Phase 6: Testing Infrastructure
-- [ ] Unit tests with Vitest for services and utilities
-- [ ] API integration tests for route handlers
-- [ ] E2E tests with Playwright for critical user flows
-- [ ] Test coverage reporting and thresholds
+- [x] Unit tests with Vitest for services and utilities
+- [x] Test coverage reporting and thresholds
 
 ---
 
