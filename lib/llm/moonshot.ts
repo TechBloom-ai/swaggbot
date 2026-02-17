@@ -1,5 +1,6 @@
 import { promptManager } from '@/lib/prompts';
 import { IntentClassification, CurlGenerationResult, WorkflowStep, LLMMessage } from '@/lib/types';
+import { log } from '@/lib/logger';
 
 import { BaseLLMProvider } from './base';
 
@@ -49,7 +50,7 @@ export class MoonshotProvider extends BaseLLMProvider {
       max_tokens: this.config.maxTokens,
     };
 
-    console.log('[MoonshotProvider] API Request:', {
+    log.info('Moonshot API Request', {
       model: this.model,
       messageCount: messages.length,
       totalChars: messages.reduce((sum, m) => sum + m.content.length, 0),
@@ -73,7 +74,7 @@ export class MoonshotProvider extends BaseLLMProvider {
     const data: MoonshotResponse = await response.json();
     const content = data.choices[0]?.message?.content || '';
 
-    console.log('[MoonshotProvider] API Response:', {
+    log.info('Moonshot API Response', {
       contentLength: content.length,
       finishReason: data.choices[0]?.finish_reason,
       usage: data.usage,
@@ -139,10 +140,10 @@ export class MoonshotProvider extends BaseLLMProvider {
       isAuthEndpoint = result.isAuthEndpoint.toLowerCase() === 'true';
     }
 
-    console.log('[MoonshotProvider] Generated curl result:', {
+    log.info('Generated curl result', {
       shouldExecute,
       isAuthEndpoint,
-      curl: result.curl ? 'present' : 'missing',
+      hasCurl: !!result.curl,
     });
 
     return {
@@ -210,7 +211,7 @@ export class MoonshotProvider extends BaseLLMProvider {
         : 'No authentication token available. Include authentication as first step if needed.',
     });
 
-    console.log('[MoonshotProvider] Planning workflow, prompt length:', prompt.length);
+    log.info('Planning workflow', { promptLength: prompt.length });
 
     // Temporarily increase max tokens for workflow planning
     const originalMaxTokens = this.config.maxTokens;
@@ -224,26 +225,28 @@ export class MoonshotProvider extends BaseLLMProvider {
     // Restore original max tokens
     this.config.maxTokens = originalMaxTokens;
 
-    console.log('[MoonshotProvider] Raw workflow response:', response.substring(0, 500));
+    log.info('Raw workflow response received', { responsePreview: response.substring(0, 500) });
 
     const parsed = this.safeJsonParse(response);
 
     if (!parsed || typeof parsed !== 'object') {
-      console.error('[MoonshotProvider] Failed to parse workflow response:', response);
+      log.error('Failed to parse workflow response', new Error('Invalid JSON'), {
+        response: response.substring(0, 200),
+      });
       throw new Error(`Invalid workflow plan format: ${response.substring(0, 200)}`);
     }
 
     const result = parsed as Record<string, unknown>;
 
     if (!result.steps) {
-      console.error('[MoonshotProvider] Missing steps in workflow plan:', result);
+      log.error('Missing steps in workflow plan', new Error('Missing steps field'), { result });
       throw new Error('Workflow plan missing required "steps" field');
     }
 
     const steps = result.steps as WorkflowStep[];
 
     if (!Array.isArray(steps)) {
-      console.error('[MoonshotProvider] Steps is not an array:', steps);
+      log.error('Steps is not an array', new Error('Invalid steps format'), { steps });
       throw new Error('Workflow steps must be an array');
     }
 

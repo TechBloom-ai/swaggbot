@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { log } from '@/lib/logger';
+
 export interface PromptTemplate {
   name: string;
   template: string;
@@ -57,18 +59,16 @@ class PromptManager {
   private loadFromFile(filePath: string, name: string): PromptTemplate | null {
     try {
       const content = readFileSync(filePath, 'utf-8');
-      console.log(`[PromptManager] Loaded file: ${filePath}, size: ${content.length} chars`);
+      log.debug('Loaded prompt file', { filePath, size: content.length });
       const result = this.parsePromptFromMarkdown(content, name);
       if (!result) {
-        console.log(`[PromptManager] Failed to parse prompt "${name}" from ${filePath}`);
+        log.debug('Failed to parse prompt from file', { name, filePath });
       } else {
-        console.log(
-          `[PromptManager] Parsed prompt "${name}", template length: ${result.template.length}`
-        );
+        log.debug('Parsed prompt', { name, templateLength: result.template.length });
       }
       return result;
     } catch (error) {
-      console.error(`[PromptManager] Error loading file ${filePath}:`, error);
+      log.error('Error loading prompt file', error, { filePath, name });
       return null;
     }
   }

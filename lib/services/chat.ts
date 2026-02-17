@@ -2,6 +2,7 @@ import { getLLMProvider } from '@/lib/llm';
 import { executeCurl, validateCurlCommand } from '@/lib/utils/curl';
 import { ChatResponse, LLMMessage } from '@/lib/types';
 import { Message } from '@/lib/db/schema';
+import { log } from '@/lib/logger';
 
 import { sessionService } from './session';
 import { tokenExtractorService } from './tokenExtractor';
@@ -50,7 +51,10 @@ export class ChatService {
       });
       _userMessageId = userMessage.id;
     } catch (error) {
-      console.error('[ChatService] Failed to load history or save user message:', error);
+      log.error('Failed to load history or save user message', error, {
+        sessionId: input.sessionId,
+        operation: 'load_history_and_save_message',
+      });
       // Explain to user and offer to continue without history
       return {
         type: 'error',
@@ -135,7 +139,10 @@ export class ChatService {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (response as any).messageId = assistantMessage.id;
     } catch (error) {
-      console.error('[ChatService] Failed to save assistant message:', error);
+      log.error('Failed to save assistant message', error, {
+        sessionId: input.sessionId,
+        operation: 'save_assistant_message',
+      });
       // Don't fail the whole request if saving fails
     }
 
@@ -183,7 +190,9 @@ export class ChatService {
 
       return { shouldReexecute: false }; // Let the normal flow handle it for now
     } catch (error) {
-      console.error('[ChatService] Failed to detect workflow reference:', error);
+      log.error('Failed to detect workflow reference', error, {
+        operation: 'detect_workflow_reference',
+      });
       return { shouldReexecute: false };
     }
   }
@@ -239,7 +248,7 @@ export class ChatService {
         curlResult.explanation?.toLowerCase().includes('to your');
 
       if (hasRefusalLanguage) {
-        console.log('[ChatService] Detected refusal language in explanation, retrying...');
+        log.info('Detected refusal language in explanation, retrying...');
 
         // Retry with more explicit instruction
         const retryMessage = `${message} (Generate ONLY the JSON response with shouldExecute: true)`;
@@ -259,11 +268,11 @@ export class ChatService {
           retryResult.explanation?.toLowerCase().includes('to your');
 
         if (!retryHasRefusal && retryResult.curl) {
-          console.log('[ChatService] Retry successful, using new result');
+          log.info('Retry successful, using new result');
           Object.assign(curlResult, retryResult);
         } else {
           // If retry still has refusal, keep the curl but force execution and clean explanation
-          console.log('[ChatService] Retry still has refusal, forcing execution anyway');
+          log.info('Retry still has refusal, forcing execution anyway');
           curlResult.shouldExecute = true;
           curlResult.explanation = `Executing API request: ${curlResult.curl?.split(' ')[2] || 'API endpoint'}`;
         }
@@ -280,10 +289,10 @@ export class ChatService {
 
       let executionResult = null;
 
-      console.log('[ChatService] Curl generation result:', {
+      log.info('Curl generation result', {
         shouldExecute: curlResult.shouldExecute,
         isAuthEndpoint: curlResult.isAuthEndpoint,
-        curl: curlResult.curl?.substring(0, 50) + '...',
+        curlPreview: curlResult.curl?.substring(0, 50) + '...',
       });
 
       // Always execute by default. Only skip if LLM explicitly set shouldExecute=false
@@ -307,18 +316,18 @@ export class ChatService {
 
       // Execute if shouldExecute is true or user explicitly asked
       if (shouldActuallyExecute) {
-        console.log('[ChatService] Executing curl command...');
+        log.info('Executing curl command...');
         executionResult = await executeCurl(curlResult.curl);
-        console.log('[ChatService] Execution result:', {
+        log.info('Execution result', {
           success: executionResult.success,
           httpCode: executionResult.httpCode,
           hasResponse: !!executionResult.response,
-          stderr: executionResult.stderr || null,
+          hasStderr: !!executionResult.stderr,
         });
 
         // Check for token expiration (401 Unauthorized)
         if (executionResult.httpCode === 401) {
-          console.warn('[ChatService] Received 401 Unauthorized - token expired');
+          log.warn('Received 401 Unauthorized - token expired');
           return {
             type: 'error',
             message:
@@ -328,7 +337,7 @@ export class ChatService {
 
         // If this is an auth endpoint and we got a successful response, extract and save token
         if (curlResult.isAuthEndpoint && executionResult.success && executionResult.response) {
-          console.log('[ChatService] Auth endpoint detected, extracting token...');
+          log.info('Auth endpoint detected, extracting token...');
 
           // Use the comprehensive token extractor with fallback strategies
           const extractionResult = tokenExtractorService.extractToken(
@@ -337,17 +346,17 @@ export class ChatService {
           );
 
           if (extractionResult.success && extractionResult.token) {
-            console.log('[ChatService] Token extracted successfully, saving to session...');
+            log.info('Token extracted successfully, saving to session...');
             await sessionService.updateAuthToken(session.id, extractionResult.token);
 
             // Add success message to the explanation
             curlResult.explanation = `${curlResult.explanation}\n\n✅ Authentication successful! Token has been automatically saved to your session.`;
           } else {
-            console.warn('[ChatService] Failed to extract token:', extractionResult.error);
+            log.warn('Failed to extract token', { error: extractionResult.error });
           }
         }
       } else {
-        console.log('[ChatService] Not executing - shouldExecute is false');
+        log.info('Not executing - shouldExecute is false');
 
         // Generate appropriate message based on why execution was skipped
         let skipReason: string;
@@ -387,6 +396,10 @@ export class ChatService {
         ...(curlResult.note && { note: curlResult.note }),
       } as ChatResponse;
     } catch (error) {
+      log.error('Failed to handle single request', error, {
+        sessionId: session.id,
+        operation: 'handle_single_request',
+      });
       return {
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to generate command',

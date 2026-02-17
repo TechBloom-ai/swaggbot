@@ -1,3 +1,5 @@
+import { log } from '@/lib/logger';
+
 export interface TokenExtractionResult {
   success: boolean;
   token?: string;
@@ -62,7 +64,7 @@ export class TokenExtractorService {
       if (tokenPath) {
         const token = this.getValueByPath(responseData, tokenPath);
         if (token && typeof token === 'string') {
-          console.log('[TokenExtractor] Token extracted using LLM-provided path:', tokenPath);
+          log.info('Token extracted using LLM-provided path', { tokenPath });
           return {
             success: true,
             token: this.formatToken(token),
@@ -75,7 +77,7 @@ export class TokenExtractorService {
       for (const path of this.commonTokenPaths) {
         const token = this.getValueByPath(responseData, path);
         if (token && typeof token === 'string') {
-          console.log('[TokenExtractor] Token extracted using common path:', path);
+          log.info('Token extracted using common path', { path });
           return {
             success: true,
             token: this.formatToken(token),
@@ -87,7 +89,7 @@ export class TokenExtractorService {
       // Strategy 3: Search recursively for token-like strings
       const foundToken = this.searchForToken(responseData);
       if (foundToken) {
-        console.log('[TokenExtractor] Token found through recursive search');
+        log.info('Token found through recursive search', { path: foundToken.path });
         return {
           success: true,
           token: this.formatToken(foundToken.token),
@@ -100,9 +102,9 @@ export class TokenExtractorService {
         error: 'Could not find authentication token in response',
       };
     } catch (error) {
-      console.error(
-        '[TokenExtractor] Error extracting token:',
-        error instanceof Error ? error.message : String(error)
+      log.error(
+        'Error extracting token',
+        error instanceof Error ? error : new Error(String(error))
       );
       return {
         success: false,

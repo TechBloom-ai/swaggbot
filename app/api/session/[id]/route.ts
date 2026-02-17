@@ -1,7 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
 import { sessionService } from '@/lib/services/session';
+import {
+  handleApiError,
+  createSuccessResponse,
+  ValidationError,
+  NotFoundError,
+} from '@/lib/errors';
+import { log } from '@/lib/logger';
 
 const updateSessionSchema = z.object({
   authToken: z.string().nullable().optional(),
@@ -11,16 +18,21 @@ const updateSessionSchema = z.object({
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+
+    log.info('Fetching session', { sessionId: id });
+
     const session = await sessionService.findById(id);
 
     if (!session) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+      throw new NotFoundError('Session', id);
     }
 
-    return NextResponse.json({ session });
+    log.info('Session fetched', { sessionId: id });
+
+    return createSuccessResponse({ session });
   } catch (error) {
-    console.error('Failed to get session:', error);
-    return NextResponse.json({ error: 'Failed to get session' }, { status: 500 });
+    log.error('Failed to get session', error, { route: 'GET /api/session/[id]' });
+    return handleApiError(error);
   }
 }
 
@@ -28,36 +40,47 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const body = await request.json();
+
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      throw new ValidationError('Invalid JSON body');
+    }
 
     // Validate input
     const validation = updateSessionSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error.flatten() },
-        { status: 400 }
-      );
+      const fields: Record<string, string[]> = {};
+      validation.error.issues.forEach(err => {
+        const path = err.path.map(String).join('.');
+        if (!fields[path]) {
+          fields[path] = [];
+        }
+        fields[path].push(err.message);
+      });
+      throw new ValidationError('Invalid input', fields);
     }
+
+    log.info('Updating session', { sessionId: id, updates: Object.keys(validation.data) });
 
     // Check if session exists
     const existingSession = await sessionService.findById(id);
     if (!existingSession) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+      throw new NotFoundError('Session', id);
     }
 
     // Update auth token if provided
     if (validation.data.authToken !== undefined) {
       const session = await sessionService.updateAuthToken(id, validation.data.authToken);
-      return NextResponse.json({ session });
+      log.info('Session auth token updated', { sessionId: id });
+      return createSuccessResponse({ session });
     }
 
-    return NextResponse.json({ session: existingSession });
+    return createSuccessResponse({ session: existingSession });
   } catch (error) {
-    console.error('Failed to update session:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update session' },
-      { status: 500 }
-    );
+    log.error('Failed to update session', error, { route: 'PATCH /api/session/[id]' });
+    return handleApiError(error);
   }
 }
 
@@ -69,17 +92,21 @@ export async function DELETE(
   try {
     const { id } = await params;
 
+    log.info('Deleting session', { sessionId: id });
+
     // Check if session exists
     const existingSession = await sessionService.findById(id);
     if (!existingSession) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+      throw new NotFoundError('Session', id);
     }
 
     await sessionService.delete(id);
 
-    return NextResponse.json({ success: true });
+    log.info('Session deleted', { sessionId: id });
+
+    return createSuccessResponse({ success: true });
   } catch (error) {
-    console.error('Failed to delete session:', error);
-    return NextResponse.json({ error: 'Failed to delete session' }, { status: 500 });
+    log.error('Failed to delete session', error, { route: 'DELETE /api/session/[id]' });
+    return handleApiError(error);
   }
 }

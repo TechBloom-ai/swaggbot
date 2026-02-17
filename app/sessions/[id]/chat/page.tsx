@@ -46,8 +46,10 @@ export default function ChatPage() {
     try {
       const response = await fetch(`/api/session/${sessionId}`);
       if (response.ok) {
-        const data = await response.json();
-        setSession(data.session);
+        const result = await response.json();
+        // Handle both old format and new format
+        const sessionData = result.data?.session || result.session;
+        setSession(sessionData);
       } else {
         router.push('/');
       }
@@ -63,10 +65,12 @@ export default function ChatPage() {
     try {
       const response = await fetch(`/api/chat?sessionId=${sessionId}`);
       if (response.ok) {
-        const data = await response.json();
-        if (data.messages && data.messages.length > 0) {
+        const result = await response.json();
+        // Handle both old format and new format
+        const messagesData = result.data?.messages || result.messages || [];
+        if (messagesData.length > 0) {
           // Parse metadata from JSON strings
-          const parsedMessages = data.messages.map(
+          const parsedMessages = messagesData.map(
             (msg: { id: string; role: string; content: string; metadata?: string }) => ({
               ...msg,
               metadata: msg.metadata ? JSON.parse(msg.metadata) : undefined,
@@ -108,7 +112,9 @@ export default function ChatPage() {
         }),
       });
 
-      const data = await response.json();
+      const result = await response.json();
+      // Handle both old format and new format
+      const data = result.data || result;
 
       // Add assistant response to chat
       addMessage(sessionId, {

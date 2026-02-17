@@ -31,8 +31,10 @@ export default function Home() {
     try {
       const response = await fetch('/api/session');
       if (response.ok) {
-        const data = await response.json();
-        setSessions(data.sessions);
+        const result = await response.json();
+        // Handle both old format and new format
+        const sessionsData = result.data?.sessions || result.sessions || [];
+        setSessions(sessionsData);
       }
     } catch (error) {
       console.error('Failed to fetch sessions:', error);
@@ -59,14 +61,16 @@ export default function Home() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const result = await response.json();
+        // Handle both old format and new format
+        const session = result.data?.session || result.session;
         setShowCreateModal(false);
         setNewSessionName('');
         setNewSwaggerUrl('');
-        router.push(`/sessions/${data.session.id}/chat`);
+        router.push(`/sessions/${session.id}/chat`);
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create session');
+        alert(error.error?.message || error.error || 'Failed to create session');
       }
     } catch (error) {
       console.error('Failed to create session:', error);
@@ -131,7 +135,7 @@ export default function Home() {
           <div className='flex h-64 items-center justify-center'>
             <div className='h-8 w-8 animate-spin rounded-full border-4 border-[var(--color-circuit-green)] border-t-transparent'></div>
           </div>
-        ) : sessions.length === 0 ? (
+        ) : sessions && sessions.length === 0 ? (
           <div className='rounded-lg border-2 border-dashed border-[var(--color-border)] bg-[var(--color-background-alt)] p-12 text-center'>
             <Bot className='mx-auto h-12 w-12 text-[var(--color-text-secondary)]' />
             <h3 className='mt-4 text-lg font-medium text-[var(--color-logic-navy)]'>

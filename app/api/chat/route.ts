@@ -1,12 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
 import { chatService } from '@/lib/services/chat';
 import { messageService } from '@/lib/services/message';
+import { handleApiError, createSuccessResponse, ValidationError } from '@/lib/errors';
+import { log } from '@/lib/logger';
 
 const chatSchema = z.object({
-  sessionId: z.string().uuid(),
-  message: z.string().min(1).max(2000),
+  sessionId: z.string().uuid('Invalid session ID format'),
+  message: z.string().min(1, 'Message cannot be empty').max(2000, 'Message too long'),
 });
 
 // GET /api/chat - Get message history for a session
@@ -15,60 +17,73 @@ export async function GET(request: NextRequest) {
     const sessionId = request.nextUrl.searchParams.get('sessionId');
 
     if (!sessionId) {
-      return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
+      throw new ValidationError('Session ID is required', {
+        sessionId: ['Session ID query parameter is required'],
+      });
     }
 
     // Validate UUID format
-    const uuidSchema = z.string().uuid();
-    const validation = uuidSchema.safeParse(sessionId);
-    if (!validation.success) {
-      return NextResponse.json({ error: 'Invalid session ID format' }, { status: 400 });
+    const uuidValidation = z.string().uuid().safeParse(sessionId);
+    if (!uuidValidation.success) {
+      throw new ValidationError('Invalid session ID format', {
+        sessionId: ['Must be a valid UUID'],
+      });
     }
+
+    log.info('Fetching message history', { sessionId });
 
     // Get recent messages
     const messages = await messageService.getRecentMessages(sessionId, 50);
 
-    return NextResponse.json({ messages });
+    log.info('Message history fetched', { sessionId, count: messages.length });
+
+    return createSuccessResponse({ messages });
   } catch (error) {
-    console.error('Failed to get message history:', error);
-    return NextResponse.json(
-      {
-        error: 'Failed to load chat history',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    );
+    log.error('Failed to get message history', error, { route: 'GET /api/chat' });
+    return handleApiError(error);
   }
 }
 
 // POST /api/chat - Send a message and get response
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      throw new ValidationError('Invalid JSON body');
+    }
 
     // Validate input
     const validation = chatSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error.flatten() },
-        { status: 400 }
-      );
+      const fields: Record<string, string[]> = {};
+      validation.error.issues.forEach(err => {
+        const path = err.path.map(String).join('.');
+        if (!fields[path]) {
+          fields[path] = [];
+        }
+        fields[path].push(err.message);
+      });
+      throw new ValidationError('Invalid input', fields);
     }
 
     const { sessionId, message } = validation.data;
 
+    log.info('Processing chat message', { sessionId, messageLength: message.length });
+
     // Process message
     const response = await chatService.processMessage({ sessionId, message });
 
-    return NextResponse.json(response);
+    log.info('Chat message processed', {
+      sessionId,
+      responseType: response.type,
+      success: response.type !== 'error',
+    });
+
+    return createSuccessResponse(response);
   } catch (error) {
-    console.error('Failed to process chat message:', error);
-    return NextResponse.json(
-      {
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to process message',
-      },
-      { status: 500 }
-    );
+    log.error('Failed to process chat message', error, { route: 'POST /api/chat' });
+    return handleApiError(error);
   }
 }

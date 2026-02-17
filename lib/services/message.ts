@@ -2,6 +2,7 @@ import { eq, desc, and } from 'drizzle-orm';
 
 import { db } from '@/lib/db';
 import { messages, Message, NewMessage } from '@/lib/db/schema';
+import { log } from '@/lib/logger';
 
 export class MessageService {
   private static instance: MessageService;
@@ -33,7 +34,10 @@ export class MessageService {
       // Return in chronological order (oldest first)
       return result.reverse();
     } catch (error) {
-      console.error('[MessageService] Failed to get recent messages:', error);
+      log.error('Failed to get recent messages', error, {
+        sessionId,
+        operation: 'get_recent_messages',
+      });
       throw new Error('Failed to load chat history. Please try again.');
     }
   }
@@ -74,7 +78,10 @@ export class MessageService {
         createdAt,
       };
     } catch (error) {
-      console.error('[MessageService] Failed to create message:', error);
+      log.error('Failed to create message', error, {
+        sessionId: data.sessionId,
+        operation: 'create_message',
+      });
       throw new Error('Failed to save message. Please try again.');
     }
   }
@@ -90,7 +97,10 @@ export class MessageService {
 
       return result[0] || null;
     } catch (error) {
-      console.error('[MessageService] Failed to get message by ID:', error);
+      log.error('Failed to get message by ID', error, {
+        messageId: id,
+        operation: 'get_message_by_id',
+      });
       throw new Error('Failed to retrieve message. Please try again.');
     }
   }
@@ -110,7 +120,10 @@ export class MessageService {
 
       return result;
     } catch (error) {
-      console.error('[MessageService] Failed to get messages by workflow ID:', error);
+      log.error('Failed to get messages by workflow ID', error, {
+        workflowId,
+        operation: 'get_messages_by_workflow',
+      });
       throw new Error('Failed to retrieve workflow messages. Please try again.');
     }
   }
@@ -147,7 +160,10 @@ export class MessageService {
 
       return null;
     } catch (error) {
-      console.error('[MessageService] Failed to find recent workflow message:', error);
+      log.error('Failed to find recent workflow message', error, {
+        sessionId,
+        operation: 'find_workflow_message',
+      });
       return null;
     }
   }
@@ -160,7 +176,7 @@ export class MessageService {
     try {
       await db.delete(messages).where(eq(messages.sessionId, sessionId));
     } catch (error) {
-      console.error('[MessageService] Failed to delete messages:', error);
+      log.error('Failed to delete messages', error, { sessionId, operation: 'delete_messages' });
       throw new Error('Failed to delete chat history. Please try again.');
     }
   }

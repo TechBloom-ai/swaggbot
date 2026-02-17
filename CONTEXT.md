@@ -932,49 +932,49 @@ lib/db/migrations/
 ## Development Roadmap
 
 ### Phase 0: Code Quality & Developer Experience
-- [ ] Prettier configuration with consistent formatting
-- [ ] ESLint improvements and strict TypeScript rules
-- [ ] Pre-commit hooks (Husky + lint-staged)
-- [ ] Barrel exports for cleaner imports
-- [ ] Path aliases validation
+- [x] Prettier configuration with consistent formatting
+- [x] ESLint improvements and strict TypeScript rules
+- [x] Pre-commit hooks (Husky + lint-staged)
+- [x] Barrel exports for cleaner imports
+- [x] Path aliases validation
 
-### Phase 1: Testing Infrastructure
-- [ ] Unit tests with Vitest for services and utilities
-- [ ] API integration tests for route handlers
-- [ ] E2E tests with Playwright for critical user flows
-- [ ] Test coverage reporting and thresholds
+### Phase 1: Error Handling & Logging (Console Only)
+- [x] Global error boundary for React components
+- [x] Structured console logging (Pino) - no log files
+- [x] API error handling middleware
+- [x] User-friendly error messages with retry actions
 
-### Phase 2: Error Handling & Logging (Console Only)
-- [ ] Global error boundary for React components
-- [ ] Structured console logging (Pino) - no log files
-- [ ] API error handling middleware
-- [ ] User-friendly error messages with retry actions
-
-### Phase 3: UI/UX Polish
+### Phase 2: UI/UX Polish
 - [ ] Loading skeletons and spinners for all async operations
 - [ ] Empty states with helpful CTAs
 - [ ] Toast notifications for user actions
 - [ ] Keyboard shortcuts (⌘+K, ⌘+Enter)
 - [ ] Mobile responsiveness improvements
 
-### Phase 4: Workflow API Routes
+### Phase 3: Workflow API Routes
 - [ ] `POST /api/workflow` - Create workflow from natural language
 - [ ] `GET /api/workflow` - List all workflows for a session
 - [ ] `GET /api/workflow/[id]` - Get workflow details
 - [ ] `POST /api/workflow/[id]/execute` - Execute workflow
 - [ ] Workflow execution history endpoint
 
-### Phase 5: Session Management UI
+### Phase 4: Session Management UI
 - [ ] Session detail page with metadata display
 - [ ] Edit session name and description
 - [ ] Auth token management UI (view, update, delete)
 - [ ] Swagger doc explorer/viewer
 - [ ] Session statistics (request count, last used)
 
-### Phase 6: Settings Page (Minimal)
+### Phase 5: Settings Page (Minimal)
 - [ ] LLM provider configuration (API keys, model selection)
 - [ ] Database cleanup utilities
 - [ ] Application info and version
+
+### Phase 6: Testing Infrastructure
+- [ ] Unit tests with Vitest for services and utilities
+- [ ] API integration tests for route handlers
+- [ ] E2E tests with Playwright for critical user flows
+- [ ] Test coverage reporting and thresholds
 
 ### Phase 7: Multi-LLM Support (Nice to Have)
 - [ ] OpenAI provider implementation
