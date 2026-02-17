@@ -31,7 +31,7 @@ export async function GET() {
   }
 }
 
-// POST /api/settings/cleanup - Run database cleanup
+// POST /api/settings - Run database cleanup
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

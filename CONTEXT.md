@@ -962,11 +962,11 @@ lib/db/migrations/
 - [x] Application info and version
 
 ### Phase 5: Workflow API Routes
-- [ ] `POST /api/workflow` - Create workflow from natural language
-- [ ] `GET /api/workflow` - List all workflows for a session
-- [ ] `GET /api/workflow/[id]` - Get workflow details
-- [ ] `POST /api/workflow/[id]/execute` - Execute workflow
-- [ ] Workflow execution history endpoint
+- [x] `POST /api/workflow` - Create workflow from natural language
+- [x] `GET /api/workflow` - List all workflows for a session
+- [x] `GET /api/workflow/[id]` - Get workflow details
+- [x] `POST /api/workflow/[id]/execute` - Execute workflow
+- [x] Workflow execution history endpoint
 
 ### Phase 6: Testing Infrastructure
 - [ ] Unit tests with Vitest for services and utilities
