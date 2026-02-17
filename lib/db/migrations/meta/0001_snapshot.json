@@ -63,12 +63,8 @@
           "name": "messages_session_id_sessions_id_fk",
           "tableFrom": "messages",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -76,12 +72,8 @@
           "name": "messages_workflow_id_workflows_id_fk",
           "tableFrom": "messages",
           "tableTo": "workflows",
-          "columnsFrom": [
-            "workflow_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workflow_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -267,12 +259,8 @@
           "name": "workflow_executions_workflow_id_workflows_id_fk",
           "tableFrom": "workflow_executions",
           "tableTo": "workflows",
-          "columnsFrom": [
-            "workflow_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workflow_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -355,12 +343,8 @@
           "name": "workflows_session_id_sessions_id_fk",
           "tableFrom": "workflows",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

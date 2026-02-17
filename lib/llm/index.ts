@@ -1,3 +1,7 @@
+// LLM providers barrel export
+export { BaseLLMProvider } from './base';
+export { MoonshotProvider } from './moonshot';
+
 import { BaseLLMProvider } from './base';
 import { MoonshotProvider } from './moonshot';
 
@@ -5,7 +9,7 @@ export type LLMProviderType = 'moonshot';
 
 export function createLLMProvider(provider?: string): BaseLLMProvider {
   const providerName = provider || process.env.LLM_PROVIDER || 'moonshot';
-  
+
   switch (providerName) {
     case 'moonshot':
       return new MoonshotProvider();
@@ -27,6 +31,3 @@ export function getLLMProvider(): BaseLLMProvider {
 export function resetLLMProvider(): void {
   llmProvider = null;
 }
-
-export { BaseLLMProvider } from './base';
-export { MoonshotProvider } from './moonshot';

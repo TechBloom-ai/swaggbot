@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { chatService } from '@/lib/services/chat';
 import { messageService } from '@/lib/services/message';
 
@@ -14,20 +15,14 @@ export async function GET(request: NextRequest) {
     const sessionId = request.nextUrl.searchParams.get('sessionId');
 
     if (!sessionId) {
-      return NextResponse.json(
-        { error: 'Session ID is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
     }
 
     // Validate UUID format
     const uuidSchema = z.string().uuid();
     const validation = uuidSchema.safeParse(sessionId);
     if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid session ID format' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Invalid session ID format' }, { status: 400 });
     }
 
     // Get recent messages
@@ -39,7 +34,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to load chat history',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );
@@ -71,7 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to process message'
+        message: error instanceof Error ? error.message : 'Failed to process message',
       },
       { status: 500 }
     );

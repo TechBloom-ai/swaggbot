@@ -1,15 +1,11 @@
 import { getLLMProvider } from '@/lib/llm';
-import { sessionService } from './session';
 import { executeCurl, validateCurlCommand } from '@/lib/utils/curl';
+import { ChatResponse, LLMMessage } from '@/lib/types';
+import { Message } from '@/lib/db/schema';
+
+import { sessionService } from './session';
 import { tokenExtractorService } from './tokenExtractor';
 import { messageService } from './message';
-import {
-  ChatResponse,
-  IntentClassification,
-  ChatMessage,
-  LLMMessage,
-} from '@/lib/types';
-import { Message } from '@/lib/db/schema';
 
 export interface ChatInput {
   sessionId: string;
@@ -18,14 +14,14 @@ export interface ChatInput {
 
 export class ChatService {
   private llm: ReturnType<typeof getLLMProvider> | null = null;
-  
+
   private getLLM() {
     if (!this.llm) {
       this.llm = getLLMProvider();
     }
     return this.llm;
   }
-  
+
   async processMessage(input: ChatInput): Promise<ChatResponse> {
     // Get session
     const session = await sessionService.findById(input.sessionId);
@@ -41,7 +37,7 @@ export class ChatService {
 
     // Load recent message history
     let history: LLMMessage[] = [];
-    let userMessageId: string | undefined;
+    let _userMessageId: string | undefined;
     try {
       const recentMessages = await messageService.getRecentMessages(input.sessionId, 10);
       history = this.convertMessagesToLLMFormat(recentMessages);
@@ -52,20 +48,26 @@ export class ChatService {
         role: 'user',
         content: input.message,
       });
-      userMessageId = userMessage.id;
+      _userMessageId = userMessage.id;
     } catch (error) {
       console.error('[ChatService] Failed to load history or save user message:', error);
       // Explain to user and offer to continue without history
       return {
         type: 'error',
-        message: 'I had trouble loading our conversation history. This might be a temporary issue. Please try again, or if the problem persists, I can continue without remembering our previous conversation.',
+        message:
+          'I had trouble loading our conversation history. This might be a temporary issue. Please try again, or if the problem persists, I can continue without remembering our previous conversation.',
       };
     }
 
     // Check if user is referencing a previous workflow
     const workflowReference = await this.detectWorkflowReference(input.message, history);
     if (workflowReference.shouldReexecute && workflowReference.workflowId) {
-      return this.handleWorkflowReexecution(session, workflowReference.workflowId, input.message, history);
+      return this.handleWorkflowReexecution(
+        session,
+        workflowReference.workflowId,
+        input.message,
+        history
+      );
     }
 
     // Classify intent with history
@@ -93,7 +95,8 @@ export class ChatService {
       default:
         response = {
           type: 'api_info',
-          explanation: 'I can help you explore and interact with your API. Try asking me to perform specific actions like "get all users" or ask questions like "what endpoints are available?"',
+          explanation:
+            'I can help you explore and interact with your API. Try asking me to perform specific actions like "get all users" or ask questions like "what endpoints are available?"',
         };
     }
 
@@ -117,14 +120,19 @@ export class ChatService {
         content,
         metadata: JSON.stringify({
           type: response.type,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           curl: (response as any).curl,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           executed: (response as any).executed,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           result: (response as any).result,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           workflowId: (response as any).workflowId,
         }),
       });
 
       // Update response with message ID
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (response as any).messageId = assistantMessage.id;
     } catch (error) {
       console.error('[ChatService] Failed to save assistant message:', error);
@@ -141,7 +149,10 @@ export class ChatService {
     }));
   }
 
-  private async detectWorkflowReference(message: string, history: LLMMessage[]): Promise<{ shouldReexecute: boolean; workflowId?: string }> {
+  private async detectWorkflowReference(
+    message: string,
+    _history: LLMMessage[]
+  ): Promise<{ shouldReexecute: boolean; workflowId?: string }> {
     const lowerMessage = message.toLowerCase();
 
     // Detect workflow reference phrases
@@ -178,10 +189,10 @@ export class ChatService {
   }
 
   private async handleWorkflowReexecution(
-    session: any,
-    workflowId: string,
-    message: string,
-    history: LLMMessage[]
+    _session: unknown,
+    _workflowId: string,
+    _message: string,
+    _history: LLMMessage[]
   ): Promise<ChatResponse> {
     // This will be implemented in Phase 5
     return {
@@ -189,17 +200,21 @@ export class ChatService {
       message: 'Workflow reexecution is not yet implemented. Please describe what you want to do.',
     };
   }
-  
-  private async handleSingleRequest(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string, history?: LLMMessage[]): Promise<ChatResponse> {
+
+  private async handleSingleRequest(
+    session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never,
+    message: string,
+    history?: LLMMessage[]
+  ): Promise<ChatResponse> {
     if (!session) {
       return {
         type: 'error',
         message: 'Session not found',
       };
     }
-    
+
     const formattedSwagger = sessionService.getFormattedSwagger(session);
-    
+
     try {
       // Generate curl command
       const curlResult = await this.getLLM().generateCurl(
@@ -208,24 +223,24 @@ export class ChatService {
         session.authToken || undefined,
         history
       );
-      
+
       // Check if LLM misunderstood and said it can't execute
-      const hasRefusalLanguage = 
-        curlResult.explanation?.toLowerCase().includes("can't") || 
-        curlResult.explanation?.toLowerCase().includes("cannot") ||
-        curlResult.explanation?.toLowerCase().includes("unable to") ||
+      const hasRefusalLanguage =
+        curlResult.explanation?.toLowerCase().includes("can't") ||
+        curlResult.explanation?.toLowerCase().includes('cannot') ||
+        curlResult.explanation?.toLowerCase().includes('unable to') ||
         curlResult.explanation?.toLowerCase().includes("i'm not able") ||
-        curlResult.explanation?.toLowerCase().includes("i am not able") ||
+        curlResult.explanation?.toLowerCase().includes('i am not able') ||
         curlResult.explanation?.toLowerCase().includes("i don't have") ||
-        curlResult.explanation?.toLowerCase().includes("i do not have") ||
-        curlResult.explanation?.toLowerCase().includes("i can only") ||
-        curlResult.explanation?.toLowerCase().includes("local server") ||
-        curlResult.explanation?.toLowerCase().includes("your server") ||
-        curlResult.explanation?.toLowerCase().includes("to your");
-      
+        curlResult.explanation?.toLowerCase().includes('i do not have') ||
+        curlResult.explanation?.toLowerCase().includes('i can only') ||
+        curlResult.explanation?.toLowerCase().includes('local server') ||
+        curlResult.explanation?.toLowerCase().includes('your server') ||
+        curlResult.explanation?.toLowerCase().includes('to your');
+
       if (hasRefusalLanguage) {
         console.log('[ChatService] Detected refusal language in explanation, retrying...');
-        
+
         // Retry with more explicit instruction
         const retryMessage = `${message} (Generate ONLY the JSON response with shouldExecute: true)`;
         const retryResult = await this.getLLM().generateCurl(
@@ -233,16 +248,16 @@ export class ChatService {
           retryMessage,
           session.authToken || undefined
         );
-        
+
         // Use retry result if it's better
-        const retryHasRefusal = 
-          retryResult.explanation?.toLowerCase().includes("can't") || 
-          retryResult.explanation?.toLowerCase().includes("cannot") ||
-          retryResult.explanation?.toLowerCase().includes("unable to") ||
-          retryResult.explanation?.toLowerCase().includes("local server") ||
-          retryResult.explanation?.toLowerCase().includes("your server") ||
-          retryResult.explanation?.toLowerCase().includes("to your");
-        
+        const retryHasRefusal =
+          retryResult.explanation?.toLowerCase().includes("can't") ||
+          retryResult.explanation?.toLowerCase().includes('cannot') ||
+          retryResult.explanation?.toLowerCase().includes('unable to') ||
+          retryResult.explanation?.toLowerCase().includes('local server') ||
+          retryResult.explanation?.toLowerCase().includes('your server') ||
+          retryResult.explanation?.toLowerCase().includes('to your');
+
         if (!retryHasRefusal && retryResult.curl) {
           console.log('[ChatService] Retry successful, using new result');
           Object.assign(curlResult, retryResult);
@@ -253,7 +268,7 @@ export class ChatService {
           curlResult.explanation = `Executing API request: ${curlResult.curl?.split(' ')[2] || 'API endpoint'}`;
         }
       }
-      
+
       // Validate curl command
       const validation = validateCurlCommand(curlResult.curl);
       if (!validation.valid) {
@@ -262,19 +277,19 @@ export class ChatService {
           message: `Invalid curl command: ${validation.error}`,
         };
       }
-      
+
       let executionResult = null;
-      
+
       console.log('[ChatService] Curl generation result:', {
         shouldExecute: curlResult.shouldExecute,
         isAuthEndpoint: curlResult.isAuthEndpoint,
         curl: curlResult.curl?.substring(0, 50) + '...',
       });
-      
+
       // Always execute by default. Only skip if LLM explicitly set shouldExecute=false
       // AND user didn't use action words. The prompt instructs shouldExecute=false only for DELETE.
       const lowerMessage = message.toLowerCase();
-      const explicitlyAskedToExecute = 
+      const explicitlyAskedToExecute =
         lowerMessage.includes('execute') ||
         lowerMessage.includes('run') ||
         lowerMessage.includes('test') ||
@@ -287,9 +302,9 @@ export class ChatService {
         lowerMessage.includes('criar') ||
         lowerMessage.includes('pegar') ||
         lowerMessage.includes('obter');
-      
+
       const shouldActuallyExecute = curlResult.shouldExecute || explicitlyAskedToExecute;
-      
+
       // Execute if shouldExecute is true or user explicitly asked
       if (shouldActuallyExecute) {
         console.log('[ChatService] Executing curl command...');
@@ -306,24 +321,25 @@ export class ChatService {
           console.warn('[ChatService] Received 401 Unauthorized - token expired');
           return {
             type: 'error',
-            message: '⚠️ **Authentication token expired.** Please redo the login again or ask me to do this for you.',
+            message:
+              '⚠️ **Authentication token expired.** Please redo the login again or ask me to do this for you.',
           };
         }
 
         // If this is an auth endpoint and we got a successful response, extract and save token
         if (curlResult.isAuthEndpoint && executionResult.success && executionResult.response) {
           console.log('[ChatService] Auth endpoint detected, extracting token...');
-          
+
           // Use the comprehensive token extractor with fallback strategies
           const extractionResult = tokenExtractorService.extractToken(
             executionResult.response,
             curlResult.tokenPath
           );
-          
+
           if (extractionResult.success && extractionResult.token) {
             console.log('[ChatService] Token extracted successfully, saving to session...');
             await sessionService.updateAuthToken(session.id, extractionResult.token);
-            
+
             // Add success message to the explanation
             curlResult.explanation = `${curlResult.explanation}\n\n✅ Authentication successful! Token has been automatically saved to your session.`;
           } else {
@@ -332,27 +348,33 @@ export class ChatService {
         }
       } else {
         console.log('[ChatService] Not executing - shouldExecute is false');
-        
+
         // Generate appropriate message based on why execution was skipped
         let skipReason: string;
         const lowerCurl = curlResult.curl.toLowerCase();
-        
+
         if (lowerCurl.includes('-x delete') || lowerCurl.includes('delete')) {
-          skipReason = "I cannot execute DELETE requests automatically as they may delete important data. If you really want to delete this resource, please review the curl command below and execute it manually, or explicitly ask me to 'execute the delete request'.";
+          skipReason =
+            "I cannot execute DELETE requests automatically as they may delete important data. If you really want to delete this resource, please review the curl command below and execute it manually, or explicitly ask me to 'execute the delete request'.";
         } else if (lowerCurl.includes('-x put') || lowerCurl.includes('-x patch')) {
-          skipReason = "I cannot execute this UPDATE request automatically as it may modify existing data. If you really want to update this resource, please review the curl command below and execute it manually, or explicitly ask me to 'execute the update request'.";
-        } else if (curlResult.hasPlaceholders || (curlResult.missingFields && curlResult.missingFields.length > 0)) {
+          skipReason =
+            "I cannot execute this UPDATE request automatically as it may modify existing data. If you really want to update this resource, please review the curl command below and execute it manually, or explicitly ask me to 'execute the update request'.";
+        } else if (
+          curlResult.hasPlaceholders ||
+          (curlResult.missingFields && curlResult.missingFields.length > 0)
+        ) {
           skipReason = `I cannot execute this request because some required information is missing. ${curlResult.missingFields ? `Missing fields: ${curlResult.missingFields.join(', ')}.` : ''} Please provide the required values.`;
         } else {
-          skipReason = "I cannot execute this request automatically. This may be a sensitive operation that requires manual review. Please review the curl command below and execute it manually if you're sure, or ask me to execute it explicitly.";
+          skipReason =
+            "I cannot execute this request automatically. This may be a sensitive operation that requires manual review. Please review the curl command below and execute it manually if you're sure, or ask me to execute it explicitly.";
         }
-        
+
         return {
           type: 'api_info',
           explanation: `${skipReason}\n\nHere's the curl command I generated:\n\`\`\`bash\n${curlResult.curl}\n\`\`\``,
         };
       }
-      
+
       return {
         type: 'curl_command',
         explanation: curlResult.explanation,
@@ -371,8 +393,12 @@ export class ChatService {
       };
     }
   }
-  
-  private async handleApiInfo(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string, history?: LLMMessage[]): Promise<ChatResponse> {
+
+  private async handleApiInfo(
+    session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never,
+    message: string,
+    history?: LLMMessage[]
+  ): Promise<ChatResponse> {
     if (!session) {
       return {
         type: 'error',
@@ -418,11 +444,16 @@ export class ChatService {
   private handleSelfAwareness(): ChatResponse {
     return {
       type: 'api_info',
-      explanation: "I'm Swaggbot, your API assistant! I help you interact with APIs using natural language. I can generate curl commands, execute API calls, and answer questions about your API's structure. Just tell me what you want to do, like 'get all users' or 'create a new product'.",
+      explanation:
+        "I'm Swaggbot, your API assistant! I help you interact with APIs using natural language. I can generate curl commands, execute API calls, and answer questions about your API's structure. Just tell me what you want to do, like 'get all users' or 'create a new product'.",
     };
   }
 
-  private async handleWorkflow(session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never, message: string, history?: LLMMessage[]): Promise<ChatResponse> {
+  private async handleWorkflow(
+    session: ReturnType<typeof sessionService.findById> extends Promise<infer T> ? T : never,
+    message: string,
+    _history?: LLMMessage[]
+  ): Promise<ChatResponse> {
     if (!session) {
       return {
         type: 'error',
@@ -438,7 +469,11 @@ export class ChatService {
       // Plan the workflow using LLM
       let steps;
       try {
-        steps = await this.getLLM().planWorkflow(formattedSwagger, message, session.authToken || undefined);
+        steps = await this.getLLM().planWorkflow(
+          formattedSwagger,
+          message,
+          session.authToken || undefined
+        );
       } catch (planError) {
         console.error('[ChatService] Workflow planning failed:', planError);
         return {
@@ -455,14 +490,29 @@ export class ChatService {
       }
 
       console.log('[ChatService] Workflow planned with', steps.length, 'steps');
-      console.log('[ChatService] Workflow steps:', steps.map(s => ({ step: s.stepNumber, desc: s.description, method: s.action.method, endpoint: s.action.endpoint })));
+      console.log(
+        '[ChatService] Workflow steps:',
+        steps.map(s => ({
+          step: s.stepNumber,
+          desc: s.description,
+          method: s.action.method,
+          endpoint: s.action.endpoint,
+        }))
+      );
 
       // Validate workflow has proper foreign key fetching for POST requests
       const postSteps = steps.filter(s => s.action.method?.toUpperCase() === 'POST');
       for (const postStep of postSteps) {
-        const missingForeignKeySteps = this.validateForeignKeySteps(postStep, steps, formattedSwagger);
+        const missingForeignKeySteps = this.validateForeignKeySteps(
+          postStep,
+          steps,
+          formattedSwagger
+        );
         if (missingForeignKeySteps.length > 0) {
-          console.warn(`[ChatService] Workflow validation failed: POST ${postStep.action.endpoint} is missing foreign key fetching steps for:`, missingForeignKeySteps);
+          console.warn(
+            `[ChatService] Workflow validation failed: POST ${postStep.action.endpoint} is missing foreign key fetching steps for:`,
+            missingForeignKeySteps
+          );
           return {
             type: 'error',
             message: `Workflow planning error: The LLM failed to include required foreign key fetching steps for ${postStep.action.endpoint}. Missing: ${missingForeignKeySteps.join(', ')}. Please try again.`,
@@ -471,7 +521,13 @@ export class ChatService {
       }
 
       // Execute workflow steps
-      const results: Array<{step: number; description: string; success: boolean; result?: unknown; error?: string}> = [];
+      const results: Array<{
+        step: number;
+        description: string;
+        success: boolean;
+        result?: unknown;
+        error?: string;
+      }> = [];
       const extractedData: Record<string, unknown> = {};
 
       for (const step of steps) {
@@ -483,7 +539,10 @@ export class ChatService {
           for (const [key, value] of Object.entries(extractedData)) {
             // Escape special regex characters in the key for filter syntax
             const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            endpoint = endpoint.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g'), String(value));
+            endpoint = endpoint.replace(
+              new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g'),
+              String(value)
+            );
           }
 
           // Build curl command
@@ -513,11 +572,13 @@ export class ChatService {
           if (step.action.body && Object.keys(step.action.body).length > 0) {
             // Build field-to-step mapping dynamically based on extractFields from previous steps
             const fieldToStepMap: Record<string, number> = {};
-            
+
             // Look at all previous steps to build the mapping
             for (const s of steps) {
-              if (s.stepNumber >= step.stepNumber) continue; // Only look at previous steps
-              
+              if (s.stepNumber >= step.stepNumber) {
+                continue;
+              } // Only look at previous steps
+
               if (s.extractFields && s.extractFields.length > 0) {
                 // Map each extracted field to this step
                 for (const field of s.extractFields) {
@@ -525,14 +586,16 @@ export class ChatService {
                   // - "id" -> map to generic field names based on step description
                   // - "[0].id" or "0.id" -> array index extraction
                   // - "type_service_id" -> specific field name
-                  
+
                   if (field === 'id' || field === '[0].id' || field === '0.id') {
                     // Extract semantic field name from step description
                     // e.g., "Fetch type services" -> "type_service_id"
                     const semanticField = this.extractSemanticFieldName(s.description);
                     if (semanticField) {
                       fieldToStepMap[semanticField] = s.stepNumber;
-                      console.log(`[ChatService] Mapped ${semanticField} to step ${s.stepNumber} (from: "${s.description}")`);
+                      console.log(
+                        `[ChatService] Mapped ${semanticField} to step ${s.stepNumber} (from: "${s.description}")`
+                      );
                     }
                   } else {
                     // Direct field name like "type_service_id"
@@ -568,13 +631,19 @@ export class ChatService {
             }
 
             for (const [fieldName, fieldValue] of Object.entries(bodyObj)) {
-              if (typeof fieldValue === 'string' && fieldValue.startsWith('{{') && fieldValue.endsWith('}}')) {
+              if (
+                typeof fieldValue === 'string' &&
+                fieldValue.startsWith('{{') &&
+                fieldValue.endsWith('}}')
+              ) {
                 // This field still has a placeholder, try to resolve it
-                console.log(`[ChatService] Found unresolved placeholder in ${fieldName}: ${fieldValue}`);
-                
+                console.log(
+                  `[ChatService] Found unresolved placeholder in ${fieldName}: ${fieldValue}`
+                );
+
                 // Extract the placeholder content (e.g., "{{[0].id}}" -> "[0].id")
                 const placeholderContent = fieldValue.slice(2, -2);
-                
+
                 // Try multiple strategies to find the value
                 let resolvedValue: unknown = undefined;
                 let resolutionSource = '';
@@ -585,7 +654,7 @@ export class ChatService {
                   const stepKey = `step${targetStepNumber}_0_id`;
                   resolvedValue = extractedData[stepKey];
                   resolutionSource = stepKey;
-                  
+
                   if (resolvedValue === undefined) {
                     // Try the semantic key directly
                     resolvedValue = extractedData[fieldName];
@@ -598,7 +667,9 @@ export class ChatService {
                   // Convert {{[0].id}} format to step-specific key
                   const normalizedPlaceholder = placeholderContent.replace(/\[(\d+)\]/g, '$1');
                   for (const prevStep of steps) {
-                    if (prevStep.stepNumber >= step.stepNumber) continue;
+                    if (prevStep.stepNumber >= step.stepNumber) {
+                      continue;
+                    }
                     const stepKey = `step${prevStep.stepNumber}_${normalizedPlaceholder.replace(/\./g, '_')}`;
                     if (extractedData[stepKey] !== undefined) {
                       resolvedValue = extractedData[stepKey];
@@ -611,12 +682,17 @@ export class ChatService {
                 // Strategy 3: Look for any step that might have extracted an ID
                 if (resolvedValue === undefined && fieldName.endsWith('_id')) {
                   for (const prevStep of steps) {
-                    if (prevStep.stepNumber >= step.stepNumber) continue;
+                    if (prevStep.stepNumber >= step.stepNumber) {
+                      continue;
+                    }
                     // Look for any id extracted from this step
                     const stepIdKey = `step${prevStep.stepNumber}_0_id`;
                     if (extractedData[stepIdKey] !== undefined) {
                       // Check if this step's description matches the field semantically
-                      const semanticMatch = this.fieldMatchesStepDescription(fieldName, prevStep.description);
+                      const semanticMatch = this.fieldMatchesStepDescription(
+                        fieldName,
+                        prevStep.description
+                      );
                       if (semanticMatch) {
                         resolvedValue = extractedData[stepIdKey];
                         resolutionSource = stepIdKey;
@@ -628,10 +704,19 @@ export class ChatService {
 
                 if (resolvedValue !== undefined) {
                   body = body.replace(`"${fieldValue}"`, JSON.stringify(resolvedValue));
-                  console.log(`[ChatService] Replaced ${fieldValue} in ${fieldName} with:`, resolvedValue, `(from: ${resolutionSource})`);
+                  console.log(
+                    `[ChatService] Replaced ${fieldValue} in ${fieldName} with:`,
+                    resolvedValue,
+                    `(from: ${resolutionSource})`
+                  );
                 } else {
-                  console.warn(`[ChatService] Could not resolve placeholder ${fieldValue} in ${fieldName}`);
-                  console.warn(`[ChatService] Available extracted data keys:`, Object.keys(extractedData));
+                  console.warn(
+                    `[ChatService] Could not resolve placeholder ${fieldValue} in ${fieldName}`
+                  );
+                  console.warn(
+                    `[ChatService] Available extracted data keys:`,
+                    Object.keys(extractedData)
+                  );
                 }
               }
             }
@@ -656,7 +741,9 @@ export class ChatService {
 
           // Check for token expiration (401 Unauthorized)
           if (executionResult.httpCode === 401) {
-            console.warn(`[ChatService] Step ${step.stepNumber} received 401 Unauthorized - token expired`);
+            console.warn(
+              `[ChatService] Step ${step.stepNumber} received 401 Unauthorized - token expired`
+            );
             results.push({
               step: step.stepNumber,
               description: step.description,
@@ -665,9 +752,12 @@ export class ChatService {
             });
 
             // Build error message with token expiration notice
-            const stepSummaries = results.map(r =>
-              `- ${r.success ? '✅' : '❌'} **Step ${r.step}:** ${r.description}${r.error ? ` (${r.error})` : ''}`
-            ).join('\n');
+            const stepSummaries = results
+              .map(
+                r =>
+                  `- ${r.success ? '✅' : '❌'} **Step ${r.step}:** ${r.description}${r.error ? ` (${r.error})` : ''}`
+              )
+              .join('\n');
 
             const errorMessage = `### Workflow stopped at step ${step.stepNumber}\n\n${stepSummaries}\n\n⚠️ **Authentication token expired.** Please redo the login again or ask me to do this for you.`;
 
@@ -683,7 +773,7 @@ export class ChatService {
               for (const field of step.extractFields) {
                 // First, check if field uses filter syntax (e.g., "[name=Mauricio Henrique].id")
                 const filterMatch = field.match(/^\[([^=]+)=([^\]]+)\](?:\.(.*))?$/);
-                
+
                 if (filterMatch) {
                   // Filter syntax extraction
                   // Store using the filter pattern as the key so it matches the placeholder
@@ -693,7 +783,10 @@ export class ChatService {
                     extractedData[field] = value;
                     // Also store with step-specific key
                     extractedData[`step${step.stepNumber}_${field}`] = value;
-                    console.log(`[ChatService] Step ${step.stepNumber} extracted ${field} as ${field}:`, value);
+                    console.log(
+                      `[ChatService] Step ${step.stepNumber} extracted ${field} as ${field}:`,
+                      value
+                    );
                   }
                 } else if (field.match(/^(\[?(\d+)\]?)\.(.+)$/)) {
                   // Array index path like "0.id" or "[0].id"
@@ -704,7 +797,7 @@ export class ChatService {
                   // Generate a unique storage key from the step description
                   let storageKey: string;
                   const semanticField = this.extractSemanticFieldName(step.description);
-                  
+
                   if (semanticField) {
                     storageKey = semanticField;
                   } else {
@@ -718,7 +811,10 @@ export class ChatService {
                     const stepSpecificKey = `step${step.stepNumber}_${index}_${propPath}`;
                     extractedData[stepSpecificKey] = value;
                     extractedData[`step${step.stepNumber}_${field}`] = value;
-                    console.log(`[ChatService] Step ${step.stepNumber} extracted ${field} as ${storageKey} and ${stepSpecificKey}:`, value);
+                    console.log(
+                      `[ChatService] Step ${step.stepNumber} extracted ${field} as ${storageKey} and ${stepSpecificKey}:`,
+                      value
+                    );
                   }
                 } else {
                   // Regular field extraction - semantic key like "payment_method_id"
@@ -728,11 +824,14 @@ export class ChatService {
                     // Use semantic field name if available, otherwise use the raw field
                     const semanticField = this.extractSemanticFieldName(step.description);
                     const storageKey = semanticField || field;
-                    
+
                     extractedData[storageKey] = value;
                     // Also store with step-specific key
                     extractedData[`step${step.stepNumber}_${field}`] = value;
-                    console.log(`[ChatService] Step ${step.stepNumber} extracted ${field} as ${storageKey}:`, value);
+                    console.log(
+                      `[ChatService] Step ${step.stepNumber} extracted ${field} as ${storageKey}:`,
+                      value
+                    );
                   }
                 }
               }
@@ -769,9 +868,12 @@ export class ChatService {
 
       // Build summary response
       const allSuccess = results.every(r => r.success);
-      const stepSummaries = results.map(r =>
-        `- ${r.success ? '✅' : '❌'} **Step ${r.step}:** ${r.description}${r.error ? ` (${r.error})` : ''}`
-      ).join('\n');
+      const stepSummaries = results
+        .map(
+          r =>
+            `- ${r.success ? '✅' : '❌'} **Step ${r.step}:** ${r.description}${r.error ? ` (${r.error})` : ''}`
+        )
+        .join('\n');
 
       return {
         type: 'curl_command',
@@ -781,7 +883,6 @@ export class ChatService {
         executed: allSuccess,
         result: results,
       } as ChatResponse;
-
     } catch (error) {
       console.error('[ChatService] Workflow execution failed:', error);
       return {
@@ -792,7 +893,9 @@ export class ChatService {
   }
 
   private extractFieldFromResponse(response: unknown, field: string): unknown {
-    if (!response || typeof response !== 'object') return undefined;
+    if (!response || typeof response !== 'object') {
+      return undefined;
+    }
 
     // Check for filter syntax: [field=value].path or [field=value]
     const filterMatch = field.match(/^\[([^=]+)=([^\]]+)\](?:\.(.*))?$/);
@@ -805,7 +908,9 @@ export class ChatService {
     let current: unknown = response;
 
     for (const part of parts) {
-      if (current === null || current === undefined) return undefined;
+      if (current === null || current === undefined) {
+        return undefined;
+      }
 
       if (Array.isArray(current) && !isNaN(Number(part))) {
         current = current[Number(part)];
@@ -835,7 +940,9 @@ export class ChatService {
       return undefined;
     }
 
-    console.log(`[ChatService] Filtering array by ${filterField}=${filterValue}, extractPath=${extractPath || 'none'}`);
+    console.log(
+      `[ChatService] Filtering array by ${filterField}=${filterValue}, extractPath=${extractPath || 'none'}`
+    );
 
     // Find all matching items (case-insensitive)
     const matches = response.filter(item => {
@@ -882,13 +989,13 @@ export class ChatService {
    */
   private extractSemanticFieldName(description: string): string | null {
     const desc = description.toLowerCase();
-    
+
     // Look for explicit field mentions in the description
     const fieldMatch = desc.match(/(\w+_id)/);
     if (fieldMatch) {
       return fieldMatch[1];
     }
-    
+
     // Map common patterns to field names
     if (desc.includes('type service')) {
       return 'type_service_id';
@@ -921,7 +1028,7 @@ export class ChatService {
     } else if (desc.includes('service')) {
       return 'service_id';
     }
-    
+
     // Try to extract from "Fetch X to get Y" pattern
     const fetchMatch = desc.match(/fetch\s+(\w+(?:\s+\w+)*)/);
     if (fetchMatch) {
@@ -931,7 +1038,7 @@ export class ChatService {
       const singular = resourceName.replace(/s$/, '');
       return singular.replace(/\s+/g, '_') + '_id';
     }
-    
+
     return null;
   }
 
@@ -942,13 +1049,12 @@ export class ChatService {
   private fieldMatchesStepDescription(fieldName: string, description: string): boolean {
     const field = fieldName.toLowerCase().replace(/_id$/, '');
     const desc = description.toLowerCase();
-    
+
     // Remove underscores from field for comparison
     const fieldWords = field.replace(/_/g, ' ');
-    
+
     // Check if field words appear in description
-    return desc.includes(fieldWords) || 
-           fieldWords.split(' ').every(word => desc.includes(word));
+    return desc.includes(fieldWords) || fieldWords.split(' ').every(word => desc.includes(word));
   }
 
   /**
@@ -956,35 +1062,51 @@ export class ChatService {
    * Returns array of missing foreign key field names.
    */
   private validateForeignKeySteps(
-    postStep: { stepNumber: number; action: { endpoint: string; method: string }; description: string },
-    allSteps: Array<{ stepNumber: number; action: { endpoint: string; method: string }; description: string }>,
+    postStep: {
+      stepNumber: number;
+      action: { endpoint: string; method: string };
+      description: string;
+    },
+    allSteps: Array<{
+      stepNumber: number;
+      action: { endpoint: string; method: string };
+      description: string;
+    }>,
     swaggerDoc: string
   ): string[] {
     const missingForeignKeys: string[] = [];
-    
+
     // Parse the swagger doc to find the POST endpoint schema
     // Look for the endpoint in the formatted swagger
-    const endpointMatch = swaggerDoc.match(new RegExp(`### POST ${postStep.action.endpoint.replace(/\//g, '\\/')}([\\s\\S]*?)(?=###|\\n## |$)`));
+    const endpointMatch = swaggerDoc.match(
+      new RegExp(
+        `### POST ${postStep.action.endpoint.replace(/\//g, '\\/')}([\\s\\S]*?)(?=###|\\n## |$)`
+      )
+    );
     if (!endpointMatch) {
-      console.log(`[ChatService] Could not find swagger definition for POST ${postStep.action.endpoint}`);
+      console.log(
+        `[ChatService] Could not find swagger definition for POST ${postStep.action.endpoint}`
+      );
       return missingForeignKeys;
     }
-    
+
     const endpointDoc = endpointMatch[0];
-    
+
     // Look for Request Body > Fields section
-    const fieldsMatch = endpointDoc.match(/Request Body:[\s\S]*?Fields:([\s\S]*?)(?=Responses:|###|## |$)/);
+    const fieldsMatch = endpointDoc.match(
+      /Request Body:[\s\S]*?Fields:([\s\S]*?)(?=Responses:|###|## |$)/
+    );
     if (!fieldsMatch) {
       console.log(`[ChatService] No fields section found for POST ${postStep.action.endpoint}`);
       return missingForeignKeys;
     }
-    
+
     const fieldsSection = fieldsMatch[1];
-    
+
     // Find all fields that are marked as REQUIRED and end with _id
     const fieldLines = fieldsSection.split('\n');
     const requiredForeignKeys: string[] = [];
-    
+
     for (const line of fieldLines) {
       // Match lines like "- type_service_id: string (REQUIRED) [FOREIGN KEY]"
       const fieldMatch = line.match(/-\s+(\w+_id):\s+\w+\s+\(REQUIRED\).*\[FOREIGN KEY\]/i);
@@ -992,43 +1114,50 @@ export class ChatService {
         requiredForeignKeys.push(fieldMatch[1]);
       }
     }
-    
+
     if (requiredForeignKeys.length === 0) {
-      console.log(`[ChatService] No required foreign keys found for POST ${postStep.action.endpoint}`);
+      console.log(
+        `[ChatService] No required foreign keys found for POST ${postStep.action.endpoint}`
+      );
       return missingForeignKeys;
     }
-    
-    console.log(`[ChatService] POST ${postStep.action.endpoint} requires foreign keys:`, requiredForeignKeys);
-    
+
+    console.log(
+      `[ChatService] POST ${postStep.action.endpoint} requires foreign keys:`,
+      requiredForeignKeys
+    );
+
     // Check if there are GET steps before this POST step that fetch these foreign keys
     const previousSteps = allSteps.filter(s => s.stepNumber < postStep.stepNumber);
-    
+
     for (const foreignKey of requiredForeignKeys) {
       // Extract the resource name from the foreign key (e.g., "type_service_id" -> "type service")
       const resourceName = foreignKey.replace(/_id$/, '').replace(/_/g, ' ');
-      
+
       // Check if any previous step fetches this resource
       const hasFetchingStep = previousSteps.some(step => {
         const stepDesc = step.description.toLowerCase();
         const stepEndpoint = step.action.endpoint.toLowerCase();
-        
+
         // Check if step description mentions the resource
-        const descMatches = stepDesc.includes(resourceName.toLowerCase()) ||
-                           stepDesc.includes(resourceName.replace(/s$/, '').toLowerCase());
-        
+        const descMatches =
+          stepDesc.includes(resourceName.toLowerCase()) ||
+          stepDesc.includes(resourceName.replace(/s$/, '').toLowerCase());
+
         // Check if step endpoint is related to the resource
-        const endpointMatches = stepEndpoint.includes(resourceName.replace(/_/g, '-')) ||
-                               stepEndpoint.includes(resourceName.replace(/_/g, ''));
-        
+        const endpointMatches =
+          stepEndpoint.includes(resourceName.replace(/_/g, '-')) ||
+          stepEndpoint.includes(resourceName.replace(/_/g, ''));
+
         return step.action.method?.toUpperCase() === 'GET' && (descMatches || endpointMatches);
       });
-      
+
       if (!hasFetchingStep) {
         missingForeignKeys.push(foreignKey);
         console.warn(`[ChatService] Missing foreign key fetching step for: ${foreignKey}`);
       }
     }
-    
+
     return missingForeignKeys;
   }
 }

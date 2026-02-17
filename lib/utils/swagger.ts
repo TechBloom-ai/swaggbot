@@ -1,4 +1,5 @@
 import yaml from 'js-yaml';
+
 import { SwaggerDoc } from '@/lib/types';
 
 export function parseSwagger(content: string): SwaggerDoc {
@@ -20,20 +21,20 @@ export function extractBaseUrl(doc: SwaggerDoc): string | null {
   if (doc.servers && doc.servers.length > 0) {
     return doc.servers[0].url;
   }
-  
+
   // Swagger 2.x
   if (doc.host) {
     const scheme = doc.schemes?.[0] || 'https';
     const basePath = doc.basePath || '';
     return `${scheme}://${doc.host}${basePath}`;
   }
-  
+
   return null;
 }
 
 export function formatSwaggerForLLM(doc: SwaggerDoc): string {
   const lines: string[] = [];
-  
+
   // Add info
   if (doc.info) {
     lines.push(`# ${doc.info.title} v${doc.info.version}`);
@@ -42,34 +43,36 @@ export function formatSwaggerForLLM(doc: SwaggerDoc): string {
     }
     lines.push('');
   }
-  
+
   // Add base URL
   const baseUrl = extractBaseUrl(doc);
   if (baseUrl) {
     lines.push(`Base URL: ${baseUrl}`);
     lines.push('');
   }
-  
+
   // Add endpoints
   lines.push('## Endpoints');
   lines.push('');
-  
+
   if (doc.paths) {
     for (const [path, methods] of Object.entries(doc.paths)) {
       for (const [method, operation] of Object.entries(methods as Record<string, unknown>)) {
-        if (typeof operation !== 'object' || operation === null) continue;
-        
+        if (typeof operation !== 'object' || operation === null) {
+          continue;
+        }
+
         const op = operation as Record<string, unknown>;
         lines.push(`### ${method.toUpperCase()} ${path}`);
-        
+
         if (op.summary) {
           lines.push(`Summary: ${op.summary}`);
         }
-        
+
         if (op.description) {
           lines.push(`Description: ${op.description}`);
         }
-        
+
         // Parameters
         if (op.parameters && Array.isArray(op.parameters) && op.parameters.length > 0) {
           lines.push('Parameters:');
@@ -83,7 +86,7 @@ export function formatSwaggerForLLM(doc: SwaggerDoc): string {
             }
           }
         }
-        
+
         // Request body with schema details
         if (op.requestBody) {
           const rb = op.requestBody as Record<string, unknown>;
@@ -94,7 +97,7 @@ export function formatSwaggerForLLM(doc: SwaggerDoc): string {
           if (rb.required) {
             lines.push('  Required: Yes');
           }
-          
+
           // Extract schema details
           const schema = extractRequestBodySchema(rb, doc);
           if (schema) {
@@ -102,7 +105,7 @@ export function formatSwaggerForLLM(doc: SwaggerDoc): string {
             formatSchemaFields(schema, lines, '    ');
           }
         }
-        
+
         // Responses
         if (op.responses) {
           lines.push('Responses:');
@@ -111,19 +114,21 @@ export function formatSwaggerForLLM(doc: SwaggerDoc): string {
             lines.push(`  ${code}: ${resp.description || 'No description'}`);
           }
         }
-        
+
         lines.push('');
       }
     }
   }
-  
+
   return lines.join('\n');
 }
 
 function getParameterType(param: Record<string, unknown>): string {
-  if (param.type) return param.type as string;
+  if (param.type) {
+    return param.type as string;
+  }
   if (param.schema && typeof param.schema === 'object') {
-    return (param.schema as Record<string, unknown>).type as string || 'string';
+    return ((param.schema as Record<string, unknown>).type as string) || 'string';
   }
   return 'string';
 }
@@ -132,22 +137,28 @@ function extractRequestBodySchema(
   requestBody: Record<string, unknown>,
   doc: SwaggerDoc
 ): Record<string, unknown> | null {
-  if (!requestBody.content) return null;
-  
+  if (!requestBody.content) {
+    return null;
+  }
+
   const content = requestBody.content as Record<string, unknown>;
   const jsonContent = content['application/json'] || content['application/json; charset=utf-8'];
-  
-  if (!jsonContent || typeof jsonContent !== 'object') return null;
-  
+
+  if (!jsonContent || typeof jsonContent !== 'object') {
+    return null;
+  }
+
   const schema = (jsonContent as Record<string, unknown>).schema;
-  if (!schema || typeof schema !== 'object') return null;
-  
+  if (!schema || typeof schema !== 'object') {
+    return null;
+  }
+
   // If schema has $ref, resolve it
   const schemaObj = schema as Record<string, unknown>;
   if (schemaObj.$ref && typeof schemaObj.$ref === 'string') {
     return resolveRef(schemaObj.$ref, doc);
   }
-  
+
   return schemaObj;
 }
 
@@ -155,7 +166,7 @@ function resolveRef(ref: string, doc: SwaggerDoc): Record<string, unknown> | nul
   // Handle #/components/schemas/Name or #/definitions/Name
   const parts = ref.replace('#/', '').split('/');
   let current: unknown = doc;
-  
+
   for (const part of parts) {
     if (current && typeof current === 'object') {
       current = (current as Record<string, unknown>)[part];
@@ -163,7 +174,7 @@ function resolveRef(ref: string, doc: SwaggerDoc): Record<string, unknown> | nul
       return null;
     }
   }
-  
+
   return current as Record<string, unknown>;
 }
 
@@ -174,33 +185,41 @@ function formatSchemaFields(
 ): void {
   const properties = schema.properties as Record<string, unknown> | undefined;
   const required = (schema.required as string[]) || [];
-  
-  if (!properties) return;
-  
+
+  if (!properties) {
+    return;
+  }
+
   for (const [fieldName, fieldSchema] of Object.entries(properties)) {
-    if (typeof fieldSchema !== 'object' || fieldSchema === null) continue;
-    
+    if (typeof fieldSchema !== 'object' || fieldSchema === null) {
+      continue;
+    }
+
     const field = fieldSchema as Record<string, unknown>;
     const isRequired = required.includes(fieldName);
     const fieldType = field.type || 'unknown';
     const isForeignKey = fieldName.endsWith('_id');
-    
+
     let fieldDesc = `${fieldName}: ${fieldType}`;
-    if (isRequired) fieldDesc += ' (REQUIRED)';
-    if (isForeignKey) fieldDesc += ' [FOREIGN KEY]';
-    
+    if (isRequired) {
+      fieldDesc += ' (REQUIRED)';
+    }
+    if (isForeignKey) {
+      fieldDesc += ' [FOREIGN KEY]';
+    }
+
     lines.push(`${indent}- ${fieldDesc}`);
-    
+
     if (field.description) {
       lines.push(`${indent}  Description: ${field.description}`);
     }
-    
+
     // Handle nested objects
     if (fieldType === 'object' && field.properties) {
       lines.push(`${indent}  Nested fields:`);
       formatSchemaFields(field, lines, `${indent}    `);
     }
-    
+
     // Handle arrays with items
     if (fieldType === 'array' && field.items && typeof field.items === 'object') {
       const items = field.items as Record<string, unknown>;

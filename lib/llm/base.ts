@@ -8,9 +8,9 @@ import {
 
 export abstract class BaseLLMProvider {
   abstract readonly name: string;
-  
+
   protected config: LLMProviderConfig;
-  
+
   constructor(config: LLMProviderConfig = {}) {
     this.config = {
       temperature: 1,
@@ -18,7 +18,7 @@ export abstract class BaseLLMProvider {
       ...config,
     };
   }
-  
+
   // Generate curl command from natural language request
   abstract generateCurl(
     swaggerDoc: string,
@@ -26,26 +26,26 @@ export abstract class BaseLLMProvider {
     authToken?: string,
     history?: LLMMessage[]
   ): Promise<CurlGenerationResult>;
-  
+
   // Classify user intent
   abstract classifyIntent(message: string, history?: LLMMessage[]): Promise<IntentClassification>;
-  
+
   // Plan a multi-step workflow
   abstract planWorkflow(
     swaggerDoc: string,
     request: string,
     authToken?: string
   ): Promise<WorkflowStep[]>;
-  
+
   // Extract data from API response
   abstract extractData(
     response: unknown,
     extractionPrompt: string
   ): Promise<Record<string, unknown>>;
-  
+
   // General chat completion
   abstract chat(messages: LLMMessage[]): Promise<string>;
-  
+
   // Helper method to safely parse JSON
   protected safeJsonParse(text: string): unknown {
     try {
@@ -67,12 +67,9 @@ export abstract class BaseLLMProvider {
       return null;
     }
   }
-  
+
   // Helper to clean up curl command
   protected cleanCurlCommand(curl: string): string {
-    return curl
-      .replace(/\n/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    return curl.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
   }
 }

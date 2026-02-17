@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import { ChatMessage } from '@/lib/types';
 
 interface ChatStore {
@@ -23,7 +24,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       timestamp: new Date(),
     };
 
-    set((state) => ({
+    set(state => ({
       messages: {
         ...state.messages,
         [sessionId]: [...(state.messages[sessionId] || []), newMessage],
@@ -38,7 +39,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       timestamp: new Date(msg.timestamp),
     }));
 
-    set((state) => ({
+    set(state => ({
       messages: {
         ...state.messages,
         [sessionId]: convertedMessages,
@@ -46,12 +47,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
 
-  getMessages: (sessionId) => {
+  getMessages: sessionId => {
     return get().messages[sessionId] || [];
   },
 
-  clearSession: (sessionId) => {
-    set((state) => ({
+  clearSession: sessionId => {
+    set(state => ({
       messages: {
         ...state.messages,
         [sessionId]: [],

@@ -8,7 +8,7 @@ export interface TokenExtractionResult {
 /**
  * Service for extracting authentication tokens from API responses
  * Ported from Swaggbot v1 (Express) to v2 (Next.js)
- * 
+ *
  * This service provides multiple extraction strategies:
  * 1. LLM-provided specific path (highest priority)
  * 2. Common token paths (access_token, token, jwt, etc.)
@@ -44,7 +44,7 @@ export class TokenExtractorService {
    * 1. LLM-provided specific path
    * 2. Common token paths
    * 3. Recursive search with pattern detection
-   * 
+   *
    * @param responseData - The API response data (parsed JSON object)
    * @param tokenPath - Optional specific JSON path from LLM (e.g., "data.access_token")
    * @returns TokenExtractionResult with extracted token, path used, and status
@@ -100,7 +100,10 @@ export class TokenExtractorService {
         error: 'Could not find authentication token in response',
       };
     } catch (error) {
-      console.error('[TokenExtractor] Error extracting token:', error instanceof Error ? error.message : String(error));
+      console.error(
+        '[TokenExtractor] Error extracting token:',
+        error instanceof Error ? error.message : String(error)
+      );
       return {
         success: false,
         error: `Token extraction failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -155,7 +158,9 @@ export class TokenExtractorService {
       for (let i = 0; i < obj.length; i++) {
         const itemPath = currentPath ? `${currentPath}[${i}]` : `[${i}]`;
         const result = this.searchForToken(obj[i], itemPath);
-        if (result) return result;
+        if (result) {
+          return result;
+        }
       }
       return undefined;
     }
@@ -172,7 +177,7 @@ export class TokenExtractorService {
         'accessToken',
         'authToken',
       ];
-      
+
       for (const key of priorityKeys) {
         if (key in obj) {
           const value = (obj as Record<string, unknown>)[key];
@@ -189,7 +194,9 @@ export class TokenExtractorService {
           const value = (obj as Record<string, unknown>)[key];
           const fullPath = currentPath ? `${currentPath}.${key}` : key;
           const result = this.searchForToken(value, fullPath);
-          if (result) return result;
+          if (result) {
+            return result;
+          }
         }
       }
     }
@@ -203,12 +210,14 @@ export class TokenExtractorService {
    * - JWT format (three base64url parts separated by dots)
    * - General tokens (alphanumeric with special chars, 20+ chars)
    * - Bearer token format (prefixed with "Bearer ")
-   * 
+   *
    * @param str - The string to check
    * @returns True if it looks like a token
    */
   private isTokenLike(str: string): boolean {
-    if (!str || typeof str !== 'string') return false;
+    if (!str || typeof str !== 'string') {
+      return false;
+    }
 
     // JWT format: three base64url parts separated by dots
     // Example: eyJhbGciOiJIUzI1NiIs...eyJzdWIiOiIxMjM0NTY3ODkw...SflKxwRJSMeKKF2QT4fwpMe
@@ -234,7 +243,7 @@ export class TokenExtractorService {
    * Format a token by removing Bearer prefix if present
    * The Bearer prefix will be added by the system when making requests
    * This ensures consistent storage without duplicate prefixes
-   * 
+   *
    * @param token - The raw token string
    * @returns Clean token without Bearer prefix
    */

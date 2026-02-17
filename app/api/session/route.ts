@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { sessionService } from '@/lib/services/session';
 
 const createSessionSchema = z.object({
@@ -14,10 +15,7 @@ export async function GET() {
     return NextResponse.json({ sessions });
   } catch (error) {
     console.error('Failed to list sessions:', error);
-    return NextResponse.json(
-      { error: 'Failed to list sessions' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to list sessions' }, { status: 500 });
   }
 }
 
@@ -25,7 +23,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
+
     // Validate input
     const validation = createSessionSchema.safeParse(body);
     if (!validation.success) {
@@ -34,9 +32,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     const session = await sessionService.create(validation.data);
-    
+
     return NextResponse.json({ session }, { status: 201 });
   } catch (error) {
     console.error('Failed to create session:', error);

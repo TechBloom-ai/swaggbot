@@ -1,4 +1,5 @@
 import { eq, desc, and } from 'drizzle-orm';
+
 import { db } from '@/lib/db';
 import { messages, Message, NewMessage } from '@/lib/db/schema';
 
@@ -47,9 +48,10 @@ export class MessageService {
     const createdAt = new Date();
 
     // Apply content limit (10,000 characters max)
-    const content = data.content.length > 10000 
-      ? data.content.substring(0, 10000) + '\n[Message truncated due to length]'
-      : data.content;
+    const content =
+      data.content.length > 10000
+        ? data.content.substring(0, 10000) + '\n[Message truncated due to length]'
+        : data.content;
 
     try {
       await db.insert(messages).values({
@@ -84,11 +86,7 @@ export class MessageService {
    */
   async getById(id: string): Promise<Message | null> {
     try {
-      const result = await db
-        .select()
-        .from(messages)
-        .where(eq(messages.id, id))
-        .limit(1);
+      const result = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
 
       return result[0] || null;
     } catch (error) {
@@ -129,12 +127,7 @@ export class MessageService {
       const result = await db
         .select()
         .from(messages)
-        .where(
-          and(
-            eq(messages.sessionId, sessionId),
-            eq(messages.role, 'assistant')
-          )
-        )
+        .where(and(eq(messages.sessionId, sessionId), eq(messages.role, 'assistant')))
         .orderBy(desc(messages.createdAt))
         .limit(limit);
 

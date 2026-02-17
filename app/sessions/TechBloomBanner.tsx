@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useEffect, useRef } from "react";
-import * as THREE from "three";
+import { useEffect, useRef } from 'react';
+import * as THREE from 'three';
 
 export function TechBloomBanner() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -12,14 +12,14 @@ export function TechBloomBanner() {
 
   useEffect(() => {
     const currentMount = mountRef.current;
-    
+
     if (!currentMount) {
       return;
     }
 
     // Scene setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("hsl(30, 25%, 96%)");
+    scene.background = new THREE.Color('hsl(30, 25%, 96%)');
     sceneRef.current = scene;
 
     // Camera setup
@@ -33,23 +33,20 @@ export function TechBloomBanner() {
     camera.position.y = 3;
 
     // Renderer setup
-    const renderer = new THREE.WebGLRenderer({ 
-      antialias: true, 
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
       alpha: true,
-      powerPreference: "high-performance"
+      powerPreference: 'high-performance',
     });
-    renderer.setSize(
-      currentMount.clientWidth,
-      currentMount.clientHeight
-    );
+    renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     currentMount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     // TechBloom Colors
-    const primaryColor = new THREE.Color("hsl(4, 69%, 62%)");
-    const secondaryColor = new THREE.Color("hsl(4, 69%, 50%)");
-    const accentColor = new THREE.Color("hsl(30, 45%, 75%)");
+    const primaryColor = new THREE.Color('hsl(4, 69%, 62%)');
+    const secondaryColor = new THREE.Color('hsl(4, 69%, 50%)');
+    const accentColor = new THREE.Color('hsl(30, 45%, 75%)');
 
     // ============================================
     // 1. FLOATING PARTICLES WITH CONNECTIONS
@@ -58,22 +55,22 @@ export function TechBloomBanner() {
     const particleGeometry = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
     const particleVelocities: { x: number; y: number; z: number }[] = [];
-    
+
     for (let i = 0; i < particleCount; i++) {
       const i3 = i * 3;
       particlePositions[i3] = (Math.random() - 0.5) * 40;
       particlePositions[i3 + 1] = (Math.random() - 0.5) * 30;
       particlePositions[i3 + 2] = (Math.random() - 0.5) * 30;
-      
+
       particleVelocities.push({
         x: (Math.random() - 0.5) * 0.02,
         y: (Math.random() - 0.5) * 0.02,
         z: (Math.random() - 0.5) * 0.02,
       });
     }
-    
+
     particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    
+
     const particleMaterial = new THREE.PointsMaterial({
       color: primaryColor,
       size: 0.3,
@@ -81,7 +78,7 @@ export function TechBloomBanner() {
       opacity: 0.8,
       sizeAttenuation: true,
     });
-    
+
     const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
     scene.add(particleSystem);
     particlesRef.current = particleSystem;
@@ -102,7 +99,7 @@ export function TechBloomBanner() {
     // ============================================
     const spheresGroup = new THREE.Group();
     const sphereCount = 8;
-    
+
     for (let i = 0; i < sphereCount; i++) {
       const sphereGeometry = new THREE.SphereGeometry(0.4 + Math.random() * 0.3, 32, 32);
       const sphereMaterial = new THREE.MeshBasicMaterial({
@@ -111,17 +108,17 @@ export function TechBloomBanner() {
         opacity: 0.6,
         wireframe: false,
       });
-      
+
       const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
       const angle = (i / sphereCount) * Math.PI * 2;
       const radius = 10 + Math.random() * 5;
-      
+
       sphere.position.set(
         Math.cos(angle) * radius,
         (Math.random() - 0.5) * 8,
         Math.sin(angle) * radius - 5
       );
-      
+
       sphere.userData = {
         angle: angle,
         radius: radius,
@@ -129,10 +126,10 @@ export function TechBloomBanner() {
         floatSpeed: 0.5 + Math.random() * 0.5,
         floatOffset: Math.random() * Math.PI * 2,
       };
-      
+
       spheresGroup.add(sphere);
     }
-    
+
     scene.add(spheresGroup);
 
     // ============================================
@@ -143,7 +140,7 @@ export function TechBloomBanner() {
       mouseRef.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove);
 
     // ============================================
     // ANIMATION LOOP
@@ -158,15 +155,21 @@ export function TechBloomBanner() {
       for (let i = 0; i < particleCount; i++) {
         const i3 = i * 3;
         const velocity = particleVelocities[i];
-        
+
         positions[i3] += velocity.x;
         positions[i3 + 1] += velocity.y;
         positions[i3 + 2] += velocity.z;
-        
+
         // Boundary check and reverse direction
-        if (Math.abs(positions[i3]) > 20) velocity.x *= -1;
-        if (Math.abs(positions[i3 + 1]) > 15) velocity.y *= -1;
-        if (Math.abs(positions[i3 + 2]) > 15) velocity.z *= -1;
+        if (Math.abs(positions[i3]) > 20) {
+          velocity.x *= -1;
+        }
+        if (Math.abs(positions[i3 + 1]) > 15) {
+          velocity.y *= -1;
+        }
+        if (Math.abs(positions[i3 + 2]) > 15) {
+          velocity.z *= -1;
+        }
       }
       particleGeometry.attributes.position.needsUpdate = true;
 
@@ -178,11 +181,15 @@ export function TechBloomBanner() {
           const dy = positions[i * 3 + 1] - positions[j * 3 + 1];
           const dz = positions[i * 3 + 2] - positions[j * 3 + 2];
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          
+
           if (distance < maxDistance) {
             linePositions.push(
-              positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2],
-              positions[j * 3], positions[j * 3 + 1], positions[j * 3 + 2]
+              positions[i * 3],
+              positions[i * 3 + 1],
+              positions[i * 3 + 2],
+              positions[j * 3],
+              positions[j * 3 + 1],
+              positions[j * 3 + 2]
             );
           }
         }
@@ -190,7 +197,7 @@ export function TechBloomBanner() {
       lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
 
       // Animate floating spheres
-      spheresGroup.children.forEach((sphere) => {
+      spheresGroup.children.forEach(sphere => {
         const mesh = sphere as THREE.Mesh;
         const { angle, radius, speed, floatSpeed, floatOffset } = mesh.userData as {
           angle: number;
@@ -200,11 +207,11 @@ export function TechBloomBanner() {
           floatOffset: number;
         };
         const newAngle = elapsedTime * speed + angle;
-        
+
         mesh.position.x = Math.cos(newAngle) * radius;
         mesh.position.z = Math.sin(newAngle) * radius - 5;
         mesh.position.y += Math.sin(elapsedTime * floatSpeed + floatOffset) * 0.01;
-        
+
         // Gentle rotation
         mesh.rotation.x += 0.01;
         mesh.rotation.y += 0.015;
@@ -221,38 +228,37 @@ export function TechBloomBanner() {
 
     // Handle resize
     const handleResize = () => {
-      if (!currentMount) return;
+      if (!currentMount) {
+        return;
+      }
 
       camera.aspect = currentMount.clientWidth / currentMount.clientHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(
-        currentMount.clientWidth,
-        currentMount.clientHeight
-      );
+      renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     };
 
-    window.addEventListener("resize", handleResize);
+    window.addEventListener('resize', handleResize);
 
     animate();
 
     // Cleanup
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('resize', handleResize);
 
       if (currentMount && renderer.domElement) {
         currentMount.removeChild(renderer.domElement);
       }
 
       renderer.dispose();
-      
+
       // Dispose all geometries and materials
       particleGeometry.dispose();
       particleMaterial.dispose();
       lineGeometry.dispose();
       lineMaterial.dispose();
-      spheresGroup.children.forEach((child) => {
+      spheresGroup.children.forEach(child => {
         const mesh = child as THREE.Mesh;
         mesh.geometry.dispose();
         (mesh.material as THREE.Material).dispose();
@@ -261,22 +267,24 @@ export function TechBloomBanner() {
   }, []);
 
   return (
-    <section className="relative w-full h-20 overflow-hidden bg-[hsl(30,25%,96%)] border-y border-[hsl(4,69%,62%)]/20">
+    <section className='relative w-full h-20 overflow-hidden bg-[hsl(30,25%,96%)] border-y border-[hsl(4,69%,62%)]/20'>
       {/* Three.js Canvas */}
-      <div ref={mountRef} className="absolute inset-0" />
-      
+      <div ref={mountRef} className='absolute inset-0' />
+
       {/* Content Overlay */}
-      <div className="relative z-10 h-full flex items-center justify-center">
-        <div className="text-center">
-          <p 
-            className="text-lg md:text-xl tracking-wide"
-            style={{ 
+      <div className='relative z-10 h-full flex items-center justify-center'>
+        <div className='text-center'>
+          <p
+            className='text-lg md:text-xl tracking-wide'
+            style={{
               color: 'hsl(4, 69%, 62%)',
-              fontFamily: '"Questrial", sans-serif'
+              fontFamily: '"Questrial", sans-serif',
             }}
           >
-            A product by 
-              <a href="https://www.techbloom.com.br" target="_blank" rel="noopener noreferrer"><span className="font-semibold"> TechBloom</span></a>
+            A product by
+            <a href='https://www.techbloom.com.br' target='_blank' rel='noopener noreferrer'>
+              <span className='font-semibold'> TechBloom</span>
+            </a>
           </p>
         </div>
       </div>

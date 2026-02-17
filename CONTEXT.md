@@ -931,30 +931,64 @@ lib/db/migrations/
 
 ## Development Roadmap
 
-### Phase 1: Core (MVP)
-- [ ] Next.js app setup with basic UI
-- [ ] SQLite database with Drizzle ORM
-- [ ] Session management (CRUD)
-- [ ] Basic chat interface
-- [ ] Moonshot LLM integration
-- [ ] Curl generation and execution
-- [ ] MCP server implementation
-- [ ] Docker setup
+### Phase 0: Code Quality & Developer Experience
+- [ ] Prettier configuration with consistent formatting
+- [ ] ESLint improvements and strict TypeScript rules
+- [ ] Pre-commit hooks (Husky + lint-staged)
+- [ ] Barrel exports for cleaner imports
+- [ ] Path aliases validation
 
-### Phase 2: Enhanced Features
-- [ ] Workflow planning and execution
-- [ ] Multi-LLM support (OpenAI, Anthropic)
-- [ ] Local model support (Ollama)
-- [ ] Swagger doc caching
-- [ ] Better error handling
+### Phase 1: Testing Infrastructure
+- [ ] Unit tests with Vitest for services and utilities
+- [ ] API integration tests for route handlers
+- [ ] E2E tests with Playwright for critical user flows
+- [ ] Test coverage reporting and thresholds
 
-### Phase 3: Polish
-- [ ] Web UI improvements (themes, shortcuts)
-- [ ] Response formatting (JSON viewer)
-- [ ] Export functionality (curl, Postman)
-- [ ] Authentication flows
-- [ ] WebSocket for real-time updates
-- [ ] Comprehensive testing
+### Phase 2: Error Handling & Logging (Console Only)
+- [ ] Global error boundary for React components
+- [ ] Structured console logging (Pino) - no log files
+- [ ] API error handling middleware
+- [ ] User-friendly error messages with retry actions
+
+### Phase 3: UI/UX Polish
+- [ ] Loading skeletons and spinners for all async operations
+- [ ] Empty states with helpful CTAs
+- [ ] Toast notifications for user actions
+- [ ] Keyboard shortcuts (⌘+K, ⌘+Enter)
+- [ ] Mobile responsiveness improvements
+
+### Phase 4: Workflow API Routes
+- [ ] `POST /api/workflow` - Create workflow from natural language
+- [ ] `GET /api/workflow` - List all workflows for a session
+- [ ] `GET /api/workflow/[id]` - Get workflow details
+- [ ] `POST /api/workflow/[id]/execute` - Execute workflow
+- [ ] Workflow execution history endpoint
+
+### Phase 5: Session Management UI
+- [ ] Session detail page with metadata display
+- [ ] Edit session name and description
+- [ ] Auth token management UI (view, update, delete)
+- [ ] Swagger doc explorer/viewer
+- [ ] Session statistics (request count, last used)
+
+### Phase 6: Settings Page (Minimal)
+- [ ] LLM provider configuration (API keys, model selection)
+- [ ] Database cleanup utilities
+- [ ] Application info and version
+
+### Phase 7: Multi-LLM Support (Nice to Have)
+- [ ] OpenAI provider implementation
+- [ ] Anthropic provider implementation
+- [ ] Ollama provider for local models
+- [ ] Provider selector in settings
+
+### Phase 8: Workflow Visualizer (Nice to Have)
+- [ ] Visual workflow builder
+- [ ] Step-by-step execution view
+- [ ] Workflow templates
+
+### Phase 9: MCP Server (Future)
+- [ ] MCP server implementation for Claude Desktop, Cursor integration
 
 ---
 

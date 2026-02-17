@@ -53,9 +53,12 @@ export interface ApiInfoResult {
       description?: string;
       schema?: unknown;
     };
-    responses?: Record<string, {
-      description: string;
-    }>;
+    responses?: Record<
+      string,
+      {
+        description: string;
+      }
+    >;
   };
 }
 
@@ -66,10 +69,10 @@ export interface SelfAwarenessResult {
 }
 
 // Union type for all chat response types
-export type ChatResponse = 
-  | CurlGenerationResult 
-  | ApiInfoResult 
-  | SelfAwarenessResult 
+export type ChatResponse =
+  | CurlGenerationResult
+  | ApiInfoResult
+  | SelfAwarenessResult
   | {
       type: 'error';
       message: string;

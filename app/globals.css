@@ -1,42 +1,42 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   /* Brand Colors from STYLE-GUIDELINE.md */
-  --color-circuit-green: #10B981;
+  --color-circuit-green: #10b981;
   --color-circuit-green-dark: #059669;
-  --color-circuit-green-light: #34D399;
-  --color-logic-navy: #1E293B;
+  --color-circuit-green-light: #34d399;
+  --color-logic-navy: #1e293b;
   --color-logic-navy-light: #334155;
-  
+
   /* Background Colors */
-  --color-background: #FFFFFF;
-  --color-background-alt: #F8FAFC;
-  
+  --color-background: #ffffff;
+  --color-background-alt: #f8fafc;
+
   /* Text Colors */
-  --color-text-primary: #1E293B;
-  --color-text-secondary: #64748B;
-  
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #64748b;
+
   /* Border & UI */
-  --color-border: #E2E8F0;
-  
+  --color-border: #e2e8f0;
+
   /* Semantic Colors */
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-error: #EF4444;
-  --color-info: #3B82F6;
-  
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
   /* Spacing */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
-  
+
   /* Border Radius */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  
+
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -49,38 +49,39 @@
   --color-circuit-green-light: var(--color-circuit-green-light);
   --color-logic-navy: var(--color-logic-navy);
   --color-logic-navy-light: var(--color-logic-navy-light);
-  
+
   /* Background */
   --color-background: var(--color-background);
   --color-background-alt: var(--color-background-alt);
-  
+
   /* Text */
   --color-text-primary: var(--color-text-primary);
   --color-text-secondary: var(--color-text-secondary);
-  
+
   /* Border */
   --color-border: var(--color-border);
-  
+
   /* Semantic */
   --color-success: var(--color-success);
   --color-warning: var(--color-warning);
   --color-error: var(--color-error);
   --color-info: var(--color-info);
-  
+
   /* Font */
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans:
+    'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Fira Code', Consolas, Monaco, monospace;
 }
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: #0F172A;
-    --color-background-alt: #1E293B;
-    --color-text-primary: #F8FAFC;
-    --color-text-secondary: #94A3B8;
+    --color-background: #0f172a;
+    --color-background-alt: #1e293b;
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #94a3b8;
     --color-border: #334155;
-    --color-circuit-green: #22C55E;
+    --color-circuit-green: #22c55e;
   }
 }
 
@@ -153,9 +154,15 @@ body {
   color: var(--color-logic-navy);
 }
 
-.markdown-content h1 { font-size: 1.25rem; }
-.markdown-content h2 { font-size: 1.125rem; }
-.markdown-content h3 { font-size: 1rem; }
+.markdown-content h1 {
+  font-size: 1.25rem;
+}
+.markdown-content h2 {
+  font-size: 1.125rem;
+}
+.markdown-content h3 {
+  font-size: 1rem;
+}
 
 .markdown-content ul,
 .markdown-content ol {
@@ -239,7 +246,9 @@ body {
 
 /* Typing indicator animation */
 @keyframes bounce {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
   }
   30% {

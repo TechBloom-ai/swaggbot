@@ -22,19 +22,19 @@ class PromptManager {
   private prompts: Map<string, PromptTemplate> = new Map();
   private customPromptsPath?: string;
   private defaultPromptsPath: string;
-  
+
   constructor() {
     this.customPromptsPath = process.env.CUSTOM_PROMPTS_PATH;
     // Resolve path relative to project root (lib/prompts is 2 levels deep from root)
     this.defaultPromptsPath = join(process.cwd(), 'PROMPTS.md');
   }
-  
+
   loadPrompt(name: string): PromptTemplate {
     // Check cache first
     if (this.prompts.has(name)) {
       return this.prompts.get(name)!;
     }
-    
+
     // Try custom prompts first (Phase 2 feature)
     if (this.customPromptsPath) {
       const custom = this.loadFromFile(this.customPromptsPath, name);
@@ -43,17 +43,17 @@ class PromptManager {
         return custom;
       }
     }
-    
+
     // Fall back to default PROMPTS.md
     const defaultPrompt = this.loadFromFile(this.defaultPromptsPath, name);
     if (defaultPrompt) {
       this.prompts.set(name, defaultPrompt);
       return defaultPrompt;
     }
-    
+
     throw new Error(`Prompt not found: ${name}`);
   }
-  
+
   private loadFromFile(filePath: string, name: string): PromptTemplate | null {
     try {
       const content = readFileSync(filePath, 'utf-8');
@@ -62,7 +62,9 @@ class PromptManager {
       if (!result) {
         console.log(`[PromptManager] Failed to parse prompt "${name}" from ${filePath}`);
       } else {
-        console.log(`[PromptManager] Parsed prompt "${name}", template length: ${result.template.length}`);
+        console.log(
+          `[PromptManager] Parsed prompt "${name}", template length: ${result.template.length}`
+        );
       }
       return result;
     } catch (error) {
@@ -70,14 +72,14 @@ class PromptManager {
       return null;
     }
   }
-  
+
   private parsePromptFromMarkdown(content: string, name: string): PromptTemplate | null {
     // Split document by --- horizontal rules (each prompt section is separated by ---)
     const sections = content.split(/^---$/m);
-    
+
     const escapedName = this.escapeRegex(name);
     const headerRegex = new RegExp(`^(?:###|##)\\s*\\d*\\.?\\s*${escapedName}\\s*$`, 'im');
-    
+
     // Find the section that contains the header matching the prompt name
     let matchedSection: string | null = null;
     for (const section of sections) {
@@ -86,13 +88,15 @@ class PromptManager {
         break;
       }
     }
-    
-    if (!matchedSection) return null;
-    
+
+    if (!matchedSection) {
+      return null;
+    }
+
     // Remove the header line itself, keep everything after it
     const headerLineRegex = new RegExp(`^(?:###|##)\\s*\\d*\\.?\\s*${escapedName}[^\\n]*\\n`, 'im');
     const template = matchedSection.replace(headerLineRegex, '').trim();
-    
+
     // Extract variable names from {{variable}} patterns
     const variableRegex = /\{\{(\w+)\}\}/g;
     const variables: string[] = [];
@@ -102,24 +106,24 @@ class PromptManager {
         variables.push(varMatch[1]);
       }
     }
-    
+
     return {
       name,
       template,
       variables,
     };
   }
-  
+
   private escapeRegex(string: string): string {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
-  
+
   render(template: string, variables: Record<string, unknown>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       return variables[key] !== undefined ? String(variables[key]) : match;
     });
   }
-  
+
   // Get the full system prompt with context
   getSystemPrompt(): string {
     try {
