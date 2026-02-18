@@ -1,80 +1,133 @@
 # Swaggbot
 
-Transform Swagger/OpenAPI documentation into conversational interfaces. Swaggbot is an open-source, self-hosted tool that lets you explore and interact with APIs through natural language chat.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Stars](https://img.shields.io/github/stars/techbloom-ai/swaggbot?style=social)](https://github.com/techbloom-ai/swaggbot)
 
-**Philosophy**: Local-first, single-user, simple to deploy. If you have access to a Swagger doc, you can explore and interact with that API naturally through chat.
+> Transform Swagger/OpenAPI docs into conversational interfaces. Self-hosted, local-first, AI-powered API exploration.
 
-## Features
-
-- **Conversational API Exploration** - Chat with any Swagger/OpenAPI documented API using natural language
-- **Web UI** - Beautiful, intuitive interface built with Next.js and shadcn/ui
-- **MCP Server** - Integrate with Claude Desktop, Cursor, and other MCP-compatible AI assistants
-- **Workflow Automation** - Plan and execute multi-step API workflows
-- **Multi-LLM Support** - Works with OpenAI, Anthropic, Moonshot, and local models via Ollama
-- **Self-Hosted** - Your data stays local, complete control over your environment
+---
 
 ## Quick Start
 
-### Prerequisites
-
-- Node.js 18+ or Docker
-- API key for your chosen LLM provider (OpenAI, Anthropic, or Moonshot)
-
-### Option 1: Local Development
-
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/swaggbot.git
-cd swaggbot
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.example .env.local
-# Edit .env.local with your API keys
-
-# Setup database
-npm run db:migrate
-
-# Start development server
-npm run dev
-```
-
-### Option 2: Docker (Recommended)
-
-```bash
-git clone https://github.com/yourusername/swaggbot.git
-cd swaggbot
-
-cp .env.example .env
+# Docker (recommended)
+git clone https://github.com/techbloom-ai/swaggbot.git
+cd swaggbot && cp .env.example .env  
 # Edit .env with your API keys
-
 docker-compose up -d
 ```
 
-Access the web UI at http://localhost:3000
+Open [http://localhost:3000](http://localhost:3000) → Paste Swagger URL → Start chatting.
 
-## Usage
+---
 
-### Web UI
+## What is Swaggbot?
 
-1. Open http://localhost:3000
-2. Click "New Session" and enter your Swagger/OpenAPI URL
-   - **Important**: Use the JSON spec URL, not the Swagger UI page
-   - ✅ Good: `https://api.example.com/swagger.json` or `https://api.example.com/openapi.json`
-   - ❌ Bad: `https://api.example.com/swagger-ui.html` (the HTML interface)
-3. Start chatting with the API naturally
+Swaggbot converts any Swagger/OpenAPI documented API into a conversational interface. Built for developers who want to:
 
-Example:
+- **Explore APIs naturally** — Chat instead of reading raw JSON
+- **Automate workflows** — Multi-step operations with data extraction
+- **Stay in control** — Self-hosted, data stays local
+- **Integrate anywhere** — Web UI, MCP server, or direct API
+
+---
+
+## Features
+
+- 🤖 **Natural Language API Interaction** — "List all users" → `GET /users`
+- 🔄 **Workflow Automation** — Chain multiple API calls with dependency resolution
+- 🔌 **MCP Server** — Use with Claude Desktop, Cursor, Windsurf
+- 🏠 **Self-Hosted** — Your data, your infrastructure
+- 🔐 **Auth Token Extraction** — Automatic session management
+- 🌐 **Multi-Provider LLM** — Moonshot, OpenAI, Anthropic, Ollama
+- 📊 **Array Filtering** — `[name=John].id` syntax for data extraction
+
+---
+
+## Architecture
+
 ```
-You: "List all users"
-Swaggbot: "I'll fetch all users for you. [Executes GET /users] Here are the results..."
+┌─────────┐  ┌─────────┐  ┌─────────┐
+│ Web UI  │  │  MCP    │  │  API    │
+│ Next.js │  │ Server  │  │ Clients │
+└────┬────┘  └────┬────┘  └────┬────┘
+     └─────────────┼─────────────┘
+                   ▼
+          ┌─────────────────┐
+          │  Chat Service   │  Intent Classification
+          │  + LLM Provider │  → Curl Generation → Execution
+          └─────────────────┘
+                   │
+     ┌─────────────┼─────────────┐
+     ▼             ▼             ▼
+┌────────┐   ┌─────────┐   ┌──────────┐
+│SQLite  │   │Workflow │   │ Target   │
+│(Local) │   │ Engine  │   │   API    │
+└────────┘   └─────────┘   └──────────┘
 ```
 
-### MCP with Claude Desktop
+---
 
-Add to your Claude Desktop configuration:
+## Installation
+
+### Prerequisites
+
+- Node.js 18+ **or** Docker
+- LLM API key (Moonshot, OpenAI, Anthropic, or Ollama)
+
+### Docker (Recommended)
+
+```bash
+docker run -d \
+  -p 3000:3000 \
+  -e MOONSHOT_API_KEY=your_key \
+  -v swaggbot-data:/app/data \
+  swaggbot/swaggbot:latest
+```
+
+### Local Development
+
+```bash
+git clone https://github.com/techbloom-ai/swaggbot.git
+cd swaggbot
+pnpm install
+cp .env.example .env.local
+# Edit .env.local with your API keys
+pnpm db:migrate
+pnpm dev
+```
+
+---
+
+## Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MOONSHOT_API_KEY` | Yes* | — | Moonshot AI API key |
+| `OPENAI_API_KEY` | Yes* | — | OpenAI API key |
+| `ANTHROPIC_API_KEY` | Yes* | — | Anthropic API key |
+| `OLLAMA_BASE_URL` | Yes* | — | Ollama server URL |
+| `LLM_PROVIDER` | No | `moonshot` | `moonshot` \| `openai` \| `anthropic` \| `ollama` |
+| `DATABASE_URL` | No | `file:./data/swaggbot.db` | SQLite database path |
+| `CLEANUP_ENABLED` | No | `true` | Auto-cleanup old sessions |
+
+\*At least one LLM provider required
+
+---
+
+## API Reference
+
+### REST API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/session` | POST | Create session from Swagger URL |
+| `/api/chat` | POST | Send message to API |
+| `/api/workflow` | POST | Create multi-step workflow |
+
+[Full API Documentation →](https://www.swaggbot.com/wiki/guides/api)
+
+### MCP Server
 
 ```json
 {
@@ -82,138 +135,97 @@ Add to your Claude Desktop configuration:
     "swaggbot": {
       "command": "npx",
       "args": ["-y", "swaggbot-mcp"],
-      "env": {
-        "SwaggbOT_API_URL": "http://localhost:3000"
-      }
+      "env": { "SWAGGBOT_API_URL": "http://localhost:3000" }
     }
   }
 }
 ```
 
-Then in Claude:
-```
-You: Help me explore the Petstore API
-Claude: I'll create a Swaggbot session for the Petstore API and help you explore it...
+[MCP Integration Guide →](https://www.swaggbot.com/wiki/guides/mcp)
+
+---
+
+## Usage Examples
+
+### Web UI
+```text
+User: Create a user named John with email john@example.com
+Swaggbot: [POST /users] Created user ID 123
 ```
 
-### API Usage
-
+### API
 ```bash
-# Create a session
-curl -X POST http://localhost:3000/api/session \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Petstore API",
-    "swaggerUrl": "https://petstore.swagger.io/v2/swagger.json"
-  }'
-
-# Chat with the API
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "sessionId": "your-session-id",
-    "message": "Get all available pets"
-  }'
+  -d '{"sessionId": "...", "message": "List all pets"}'
 ```
 
-## Configuration
+---
 
-### Environment Variables
+## Technology Stack
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | SQLite database path | No (default: `file:./data/swaggbot.db`) |
-| `LLM_PROVIDER` | Provider: `openai`, `anthropic`, `moonshot`, `ollama` | No (default: `moonshot`) |
-| `OPENAI_API_KEY` | OpenAI API key | If using OpenAI |
-| `ANTHROPIC_API_KEY` | Anthropic API key | If using Claude |
-| `MOONSHOT_API_KEY` | Moonshot API key | If using Moonshot |
-| `OLLAMA_BASE_URL` | Ollama server URL | If using local models |
+| Component | Technology |
+|-----------|------------|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript 5 |
+| Database | SQLite (libSQL/Turso) |
+| ORM | Drizzle ORM |
+| UI | shadcn/ui + TailwindCSS 4 |
+| State | Zustand |
+| LLM SDK | Vercel AI SDK patterns |
+| MCP | Model Context Protocol SDK |
+| Testing | Vitest |
+| Container | Docker |
 
-See `.env.example` for all available options.
-
-## Architecture
-
-Swaggbot is built with a modern, modular architecture:
-
-- **Next.js 14+** - Full-stack framework with App Router
-- **libSQL (Turso)** - SQLite-compatible database, edge-ready
-- **Drizzle ORM** - Type-safe database operations
-- **Vercel AI SDK** - Universal LLM interface
-- **MCP SDK** - Model Context Protocol implementation
-- **TailwindCSS + shadcn/ui** - Modern, accessible UI
-
-```
-┌─────────────────────────────────────────┐
-│           Next.js Application           │
-│  ┌──────────┐ ┌──────────┐ ┌─────────┐  │
-│  │  Web UI  │ │  API     │ │  MCP    │  │
-│  │          │ │  Routes  │ │  Server │  │
-│  └────┬─────┘ └────┬─────┘ └────┬────┘  │
-│       └─────────────┴────────────┘       │
-│              Core Services               │
-│         (LLM, Parser, Workflow)          │
-│                   │                      │
-│              SQLite (libSQL)             │
-└─────────────────────────────────────────┘
-```
+---
 
 ## Project Structure
 
 ```
 swaggbot/
-├── app/                 # Next.js App Router
-│   ├── (dashboard)/     # Dashboard UI routes
-│   └── api/             # API routes
-├── components/          # React components
-├── lib/                 # Core library
-│   ├── db/             # Database schema & migrations
-│   ├── llm/            # LLM providers
-│   ├── mcp/            # MCP server
-│   └── services/       # Business logic
-├── hooks/              # React hooks
-└── stores/             # Zustand stores
+├── app/              # Next.js App Router
+├── components/       # shadcn/ui components
+├── lib/
+│   ├── db/          # Database schema & client
+│   ├── llm/         # LLM provider implementations
+│   ├── services/    # Business logic
+│   └── prompts/     # LLM prompt management
+├── scripts/         # MCP server
+└── data/            # SQLite storage
 ```
-
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# Run database migrations
-npm run db:migrate
-
-# Start development server
-npm run dev
-
-# Run tests
-npm run test
-
-# Build for production
-npm run build
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
-
-## Security
-
-- **Local-first**: Designed for single-user, local deployment
-- **No data retention**: Chat history is not persisted
-- **Secure storage**: Auth tokens and API keys stored safely
-- **Input validation**: All inputs validated with Zod schemas
-
-## License
-
-MIT License - see [LICENSE](./LICENSE) for details.
 
 ---
 
-Built with ❤️ for developers who love exploring APIs.
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
+
+### Development Setup
+
+```bash
+pnpm install
+pnpm db:migrate
+pnpm dev
+```
+
+### Running Tests
+
+```bash
+pnpm test
+pnpm test:coverage
+```
+
+---
+
+## Security
+
+- **Local-first**: All data stored locally in SQLite
+- **No data retention**: Swaggbot doesn't persist API responses
+- **Secure token storage**: Auth tokens encrypted at rest
+- **No telemetry**: Zero analytics or tracking
+
+---
+
+## License
+
+MIT © [TechBloom](LICENSE)
