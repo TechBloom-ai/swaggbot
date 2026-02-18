@@ -11,6 +11,7 @@ WORKDIR /app
 # Copy package files first for better layer caching
 COPY package.json pnpm-lock.yaml ./
 COPY tsconfig.json ./
+COPY drizzle.config.ts ./
 
 # Install pnpm and all dependencies (including dev dependencies for TypeScript)
 RUN npm install -g pnpm && pnpm install --frozen-lockfile
@@ -22,6 +23,12 @@ RUN npm install -g tsx
 COPY scripts/mcp-server.ts ./scripts/
 COPY lib/ ./lib/
 
+# Copy prompt definitions (required for LLM interactions)
+COPY PROMPTS.md ./
+
+# Copy migration files (required for database setup)
+COPY lib/db/migrations/ ./lib/db/migrations/
+
 # Create data directory
 RUN mkdir -p /app/data
 
@@ -31,6 +38,8 @@ ENV DATABASE_URL=file:/app/data/swaggbot.db
 ENV LLM_PROVIDER=moonshot
 ENV MOONSHOT_MODEL=kimi-k2.5
 
-# The MCP server uses stdio transport
-ENTRYPOINT ["tsx"]
-CMD ["scripts/mcp-server.ts"]
+# Create startup script that runs migrations before starting the server
+RUN printf '#!/bin/sh\necho "Running database migrations..."\npnpm drizzle-kit migrate\necho "Starting MCP server..."\nexec tsx scripts/mcp-server.ts\n' > /app/start.sh && chmod +x /app/start.sh
+
+# The MCP server uses stdio transport with migrations
+ENTRYPOINT ["/app/start.sh"]

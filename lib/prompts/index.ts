@@ -1,7 +1,12 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 import { log } from '@/lib/logger';
+
+// Get current file directory in ESM-compatible way
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface PromptTemplate {
   name: string;
@@ -27,8 +32,9 @@ class PromptManager {
 
   constructor() {
     this.customPromptsPath = process.env.CUSTOM_PROMPTS_PATH;
-    // Resolve path relative to project root (lib/prompts is 2 levels deep from root)
-    this.defaultPromptsPath = join(process.cwd(), 'PROMPTS.md');
+    // Resolve path relative to this file location (lib/prompts is 2 levels deep from root)
+    // This ensures PROMPTS.md is found regardless of where the code is executed from
+    this.defaultPromptsPath = join(__dirname, '..', '..', 'PROMPTS.md');
   }
 
   loadPrompt(name: string): PromptTemplate {
@@ -53,18 +59,45 @@ class PromptManager {
       return defaultPrompt;
     }
 
-    throw new Error(`Prompt not found: ${name}`);
+    // Enhanced error message with debugging info
+    const error = new Error(
+      `Prompt not found: ${name}\n` +
+        `CWD: ${process.cwd()}\n` +
+        `Resolved path: ${this.defaultPromptsPath}\n` +
+        `File exists: ${existsSync(this.defaultPromptsPath)}\n` +
+        `ENV CUSTOM_PROMPTS_PATH: ${this.customPromptsPath || 'not set'}`
+    );
+    throw error;
   }
 
   private loadFromFile(filePath: string, name: string): PromptTemplate | null {
     try {
+      log.info('Attempting to load prompt file', { filePath, name, exists: existsSync(filePath) });
+
+      if (!existsSync(filePath)) {
+        log.error('Prompt file does not exist', new Error(`File not found: ${filePath}`), {
+          filePath,
+          name,
+        });
+        return null;
+      }
+
       const content = readFileSync(filePath, 'utf-8');
-      log.debug('Loaded prompt file', { filePath, size: content.length });
+      log.info('Loaded prompt file successfully', { filePath, name, size: content.length });
+
       const result = this.parsePromptFromMarkdown(content, name);
       if (!result) {
-        log.debug('Failed to parse prompt from file', { name, filePath });
+        log.error(
+          'Failed to parse prompt from file',
+          new Error(`Prompt "${name}" not found in ${filePath}`),
+          { name, filePath }
+        );
       } else {
-        log.debug('Parsed prompt', { name, templateLength: result.template.length });
+        log.info('Parsed prompt successfully', {
+          name,
+          filePath,
+          templateLength: result.template.length,
+        });
       }
       return result;
     } catch (error) {
@@ -77,19 +110,39 @@ class PromptManager {
     // Split document by --- horizontal rules (each prompt section is separated by ---)
     const sections = content.split(/^---$/m);
 
+    log.debug('Parsing markdown content', {
+      name,
+      totalSections: sections.length,
+      contentPreview: content.substring(0, 200),
+    });
+
     const escapedName = this.escapeRegex(name);
     const headerRegex = new RegExp(`^(?:###|##)\\s*\\d*\\.?\\s*${escapedName}\\s*$`, 'im');
 
+    log.debug('Using header regex', { escapedName, regex: headerRegex.toString() });
+
     // Find the section that contains the header matching the prompt name
     let matchedSection: string | null = null;
-    for (const section of sections) {
-      if (headerRegex.test(section)) {
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i];
+      const hasHeader = headerRegex.test(section);
+      log.debug(`Checking section ${i}`, { hasHeader, sectionPreview: section.substring(0, 100) });
+      if (hasHeader) {
         matchedSection = section;
+        log.debug('Found matching section', { sectionIndex: i, name });
         break;
       }
     }
 
     if (!matchedSection) {
+      log.error('No matching section found', new Error(`Section "${name}" not found`), {
+        name,
+        totalSections: sections.length,
+        availableSections: sections.map((s, i) => {
+          const lines = s.split('\n').slice(0, 3);
+          return `Section ${i}: ${lines.join(' | ').substring(0, 100)}`;
+        }),
+      });
       return null;
     }
 

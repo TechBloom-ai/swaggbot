@@ -2,7 +2,54 @@ import { eq, sql } from 'drizzle-orm';
 
 import { db } from '@/lib/db';
 import { sessions, NewSession, Session, messages } from '@/lib/db/schema';
+import { SwaggerDoc } from '@/lib/types';
 import { parseSwagger, extractBaseUrl, formatSwaggerForLLM } from '@/lib/utils/swagger';
+
+/**
+ * Extract the origin (protocol + host) from a URL
+ * e.g., "http://192.168.1.8:3000/swagger.json" -> "http://192.168.1.8:3000"
+ */
+function extractOriginFromUrl(url: string): string | null {
+  try {
+    const urlObj = new URL(url);
+    return `${urlObj.protocol}//${urlObj.host}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Derive base URL by combining origin from Swagger URL with path from Swagger document's servers
+ * This ensures the correct API base path is used even when the swagger.json is served from a different path
+ *
+ * Example:
+ * - swaggerUrl: "http://192.168.1.8:3000/swagger.json"
+ * - swaggerDoc.servers[0].url: "http://localhost:3000/api/v1"
+ * - Result: "http://192.168.1.8:3000/api/v1"
+ */
+function deriveBaseUrl(swaggerUrl: string, swaggerDoc: SwaggerDoc): string | null {
+  // Extract origin from the Swagger URL (protocol + host)
+  const urlOrigin = extractOriginFromUrl(swaggerUrl);
+  if (!urlOrigin) {
+    return extractBaseUrl(swaggerDoc);
+  }
+
+  // Extract path from Swagger document's servers
+  const swaggerDocBaseUrl = extractBaseUrl(swaggerDoc);
+  if (swaggerDocBaseUrl) {
+    try {
+      const docUrl = new URL(swaggerDocBaseUrl);
+      // Combine origin from swaggerUrl with pathname from swaggerDoc
+      // Remove trailing slash to avoid double slashes when appending endpoints
+      return `${urlOrigin}${docUrl.pathname}`.replace(/\/+$/, '');
+    } catch {
+      // If swaggerDocBaseUrl is relative (e.g., "/api/v1")
+      return `${urlOrigin}${swaggerDocBaseUrl}`.replace(/\/+$/, '');
+    }
+  }
+
+  return urlOrigin;
+}
 
 export interface CreateSessionInput {
   name: string;
@@ -39,8 +86,8 @@ export class SessionService {
     // Parse Swagger document
     const swaggerDoc = parseSwagger(content);
 
-    // Extract base URL
-    const baseUrl = extractBaseUrl(swaggerDoc);
+    // Derive base URL from Swagger URL origin (priority) with fallback to Swagger doc
+    const baseUrl = deriveBaseUrl(input.swaggerUrl, swaggerDoc);
 
     // Create session
     const now = new Date();
@@ -119,7 +166,8 @@ export class SessionService {
       }
       const content = await response.text();
       const swaggerDoc = parseSwagger(content);
-      const baseUrl = extractBaseUrl(swaggerDoc);
+      // Derive base URL from Swagger URL origin (priority) with fallback to Swagger doc
+      const baseUrl = deriveBaseUrl(input.swaggerUrl, swaggerDoc);
 
       updateData.swaggerUrl = input.swaggerUrl;
       updateData.swaggerDoc = JSON.stringify(swaggerDoc);

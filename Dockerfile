@@ -35,6 +35,8 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/PROMPTS.md ./
+# Also copy PROMPTS.md to standalone directory for standalone mode
+COPY --from=builder /app/PROMPTS.md ./.next/standalone/
 
 # Create data directory
 RUN mkdir -p data

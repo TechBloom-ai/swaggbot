@@ -451,6 +451,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['sessionId', 'endpoint', 'method'],
         },
       },
+      {
+        name: 'swaggbot_set_auth_token',
+        description:
+          'Manually set the authentication token for a session. Use this after login to save the access token so subsequent requests are authenticated.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            sessionId: {
+              type: 'string',
+              description: 'ID of the session to set the auth token for',
+            },
+            token: {
+              type: 'string',
+              description:
+                'The authentication token (e.g., JWT access token). Can be provided with or without "Bearer " prefix.',
+            },
+          },
+          required: ['sessionId', 'token'],
+        },
+      },
     ],
   };
 });
@@ -812,6 +832,40 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
             {
               type: 'text',
               text: JSON.stringify(result.response, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'swaggbot_set_auth_token': {
+        const { sessionId, token } = args as { sessionId: string; token: string };
+
+        // Verify session exists
+        const session = await sessionService.findById(sessionId);
+        if (!session) {
+          const error = createError(
+            'SESSION_NOT_FOUND',
+            `Session ${sessionId} not found`,
+            { sessionId },
+            'Use swaggbot_list_sessions to see available sessions'
+          );
+          return {
+            content: [{ type: 'text', text: errorToText(error) }],
+            isError: true,
+          };
+        }
+
+        // Clean up the token (remove Bearer prefix if present for storage)
+        const cleanToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+
+        // Update the session's auth token
+        await sessionService.updateAuthToken(sessionId, cleanToken);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ Authentication token set successfully for session "${session.name}".\n\nSubsequent API calls will now include the Authorization header.`,
             },
           ],
         };
