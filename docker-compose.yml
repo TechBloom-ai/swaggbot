@@ -1,8 +1,12 @@
 version: '3.8'
 
 services:
-  swaggbot:
-    build: .
+  # Web UI Service
+  swaggbot-web:
+    image: swaggbot-web:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - '3000:3000'
     environment:
@@ -13,7 +17,7 @@ services:
       - MOONSHOT_MODEL=${MOONSHOT_MODEL:-kimi-k2.5}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     volumes:
-      - ./data:/app/data
+      - swaggbot-data:/app/data
     restart: unless-stopped
     healthcheck:
       test:
@@ -22,3 +26,29 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # MCP Server Service (for opencode integration)
+  # This service is designed to be run on-demand via docker-compose run
+  swaggbot-mcp:
+    image: swaggbot-mcp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/swaggbot.db
+      - LLM_PROVIDER=${LLM_PROVIDER:-moonshot}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
+      - MOONSHOT_MODEL=${MOONSHOT_MODEL:-kimi-k2.5}
+    volumes:
+      - swaggbot-data:/app/data
+    # Stdio transport requires these flags
+    stdin_open: true
+    tty: true
+    # Don't auto-start - only run on demand
+    profiles:
+      - mcp
+
+volumes:
+  swaggbot-data:
+    driver: local

@@ -1,0 +1,36 @@
+# Dockerfile for Swaggbot MCP Server
+# This is a production-ready image for running the MCP server with stdio transport
+
+FROM node:20-alpine
+
+# Install dependencies
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY package.json pnpm-lock.yaml ./
+COPY tsconfig.json ./
+
+# Install pnpm and all dependencies (including dev dependencies for TypeScript)
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
+
+# Install tsx for running TypeScript directly (faster than ts-node)
+RUN npm install -g tsx
+
+# Copy source code
+COPY scripts/mcp-server.ts ./scripts/
+COPY lib/ ./lib/
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV DATABASE_URL=file:/app/data/swaggbot.db
+ENV LLM_PROVIDER=moonshot
+ENV MOONSHOT_MODEL=kimi-k2.5
+
+# The MCP server uses stdio transport
+ENTRYPOINT ["tsx"]
+CMD ["scripts/mcp-server.ts"]
