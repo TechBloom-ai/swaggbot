@@ -21,7 +21,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV DATABASE_URL=file:/app/data/swaggbot.db
 
-# Install pnpm
+# Install pnpm and curl (required for API execution)
+RUN apk add --no-cache curl
 RUN npm install -g pnpm
 
 # Copy necessary files from builder

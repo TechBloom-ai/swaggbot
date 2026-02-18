@@ -32,7 +32,7 @@ export function extractBaseUrl(doc: SwaggerDoc): string | null {
   return null;
 }
 
-export function formatSwaggerForLLM(doc: SwaggerDoc): string {
+export function formatSwaggerForLLM(doc: SwaggerDoc, baseUrlOverride?: string): string {
   const lines: string[] = [];
 
   // Add info
@@ -44,8 +44,8 @@ export function formatSwaggerForLLM(doc: SwaggerDoc): string {
     lines.push('');
   }
 
-  // Add base URL
-  const baseUrl = extractBaseUrl(doc);
+  // Add base URL - use override if provided, otherwise extract from doc
+  const baseUrl = baseUrlOverride ?? extractBaseUrl(doc);
   if (baseUrl) {
     lines.push(`Base URL: ${baseUrl}`);
     lines.push('');

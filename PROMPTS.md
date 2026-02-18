@@ -132,11 +132,12 @@ Authentication:
 {{authToken}}
 
 Rules:
-1. Use exact endpoint paths from documentation
-2. Include ALL required parameters - NEVER use placeholders like "string", "value", "id", "<value>", "PLACEHOLDER", "example", etc.
-3. Use correct HTTP method
-4. Format as single-line curl command
-5. Include proper headers (Content-Type, Authorization if token provided)
+1. **CRITICAL - Base URL: Use the EXACT Base URL shown in the API documentation below. This URL has been pre-configured to work with the Swaggbot backend environment (e.g., Docker networking with IP addresses). DO NOT use localhost, 127.0.0.1, or any URL other than what's explicitly shown as "Base URL" in the documentation.**
+2. Use exact endpoint paths from documentation (append them to the Base URL)
+3. Include ALL required parameters - NEVER use placeholders like "string", "value", "id", "<value>", "PLACEHOLDER", "example", etc.
+4. Use correct HTTP method
+5. Format as single-line curl command
+6. Include proper headers (Content-Type, Authorization if token provided)
 
 When authentication token is provided:
 - Add Authorization header: -H 'Authorization: Bearer <token>'
@@ -264,11 +265,27 @@ Example 5 - Login request:
   "missingFields": null
 }
 
-Example 6 - Local development server (localhost is OK):
+Example 6 - Local development server (Docker/networking - use the provided Base URL):
 {
   "type": "curl_command",
-  "explanation": "Retrieves data from local development API",
-  "curl": "curl -X GET 'http://localhost:3000/api/users' -H 'Content-Type: application/json'",
+  "explanation": "Retrieves data from local development API using the configured base URL",
+  "curl": "curl -X GET 'http://192.168.1.8:3000/api/users' -H 'Content-Type: application/json'",
+  "shouldExecute": true,
+  "isAuthEndpoint": false,
+  "tokenPath": null,
+  "hasPlaceholders": false,
+  "missingFields": null
+}
+
+Example 7 - Docker environment with IP address (CRITICAL: Use the Base URL from documentation):
+If the API documentation shows:
+  Base URL: http://192.168.1.8:3000/api/v1
+
+Then the curl command MUST use that exact base URL:
+{
+  "type": "curl_command",
+  "explanation": "Creates a new user using the configured Docker-accessible base URL",
+  "curl": "curl -X POST 'http://192.168.1.8:3000/api/v1/users' -H 'Content-Type: application/json' -d '{\"name\":\"John Doe\",\"email\":\"john@example.com\"}'",
   "shouldExecute": true,
   "isAuthEndpoint": false,
   "tokenPath": null,

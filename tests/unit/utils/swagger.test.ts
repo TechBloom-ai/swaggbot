@@ -305,5 +305,51 @@ info:
       expect(result).toContain('Fields:');
       expect(result).toContain('name: string');
     });
+
+    describe('baseUrl override', () => {
+      it('should use override baseUrl instead of extracted one', () => {
+        const doc = {
+          openapi: '3.0.0',
+          info: { title: 'Test API', version: '1.0.0' },
+          servers: [{ url: 'http://localhost:3000/api/v1' }],
+        };
+        const overrideUrl = 'http://192.168.1.8:3000/api/v1';
+        const result = formatSwaggerForLLM(doc as any, overrideUrl);
+        expect(result).toContain('Base URL: http://192.168.1.8:3000/api/v1');
+        expect(result).not.toContain('Base URL: http://localhost:3000/api/v1');
+      });
+
+      it('should use extracted baseUrl when no override provided', () => {
+        const doc = {
+          openapi: '3.0.0',
+          info: { title: 'Test API', version: '1.0.0' },
+          servers: [{ url: 'http://localhost:3000/api/v1' }],
+        };
+        const result = formatSwaggerForLLM(doc as any);
+        expect(result).toContain('Base URL: http://localhost:3000/api/v1');
+      });
+
+      it('should use override baseUrl for Docker IP scenario', () => {
+        const doc = {
+          openapi: '3.0.0',
+          info: { title: 'Test API', version: '1.0.0' },
+          servers: [{ url: 'http://127.0.0.1:3000/api' }],
+        };
+        const dockerUrl = 'http://172.17.0.1:3000/api';
+        const result = formatSwaggerForLLM(doc as any, dockerUrl);
+        expect(result).toContain('Base URL: http://172.17.0.1:3000/api');
+        expect(result).not.toContain('127.0.0.1');
+      });
+
+      it('should work with override when no servers defined in doc', () => {
+        const doc = {
+          openapi: '3.0.0',
+          info: { title: 'Test API', version: '1.0.0' },
+        };
+        const overrideUrl = 'http://192.168.1.100:5000/api';
+        const result = formatSwaggerForLLM(doc as any, overrideUrl);
+        expect(result).toContain('Base URL: http://192.168.1.100:5000/api');
+      });
+    });
   });
 });

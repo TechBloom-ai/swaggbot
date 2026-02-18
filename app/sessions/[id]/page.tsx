@@ -468,7 +468,7 @@ export default function SessionDetailPage() {
                 <div className='flex gap-2'>
                   <button
                     onClick={() => setShowSwagger(!showSwagger)}
-                    className='rounded-lg border border-[var(--color-border)] bg-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)]'
+                    className='rounded-lg border border-[var(--color-border)] bg-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'
                   >
                     {showSwagger ? 'Hide' : 'View'}
                   </button>
@@ -476,7 +476,7 @@ export default function SessionDetailPage() {
                     href={session.swaggerUrl}
                     target='_blank'
                     rel='noopener noreferrer'
-                    className='flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)]'
+                    className='flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'
                   >
                     <ExternalLink className='h-3 w-3' />
                     Open

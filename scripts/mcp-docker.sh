@@ -96,10 +96,12 @@ main() {
         -i \
         --init \
         --name "${SERVICE_NAME}-$$" \
+        --add-host host.docker.internal:host-gateway \
         -e MOONSHOT_API_KEY="$MOONSHOT_API_KEY" \
         -e MOONSHOT_MODEL="${MOONSHOT_MODEL:-kimi-k2.5}" \
         -e LLM_PROVIDER="${LLM_PROVIDER:-moonshot}" \
         -e DATABASE_URL="file:/app/data/swaggbot.db" \
+        -e RUNNING_IN_DOCKER=true \
         -v "${PROJECT_NAME}_swaggbot-data:/app/data" \
         "swaggbot-mcp"
 }

@@ -5,11 +5,28 @@ import { ExecutionResult } from '@/lib/types';
 
 const execAsync = promisify(exec);
 
+/**
+ * When running inside Docker, rewrite localhost/127.0.0.1 URLs to host.docker.internal
+ * so curl can reach services running on the host machine.
+ */
+function rewriteLocalhostForDocker(command: string): string {
+  if (process.env.RUNNING_IN_DOCKER !== 'true') {
+    return command;
+  }
+
+  return command
+    .replace(/http:\/\/localhost/g, 'http://host.docker.internal')
+    .replace(/https:\/\/localhost/g, 'https://host.docker.internal')
+    .replace(/http:\/\/127\.0\.0\.1/g, 'http://host.docker.internal')
+    .replace(/https:\/\/127\.0\.0\.1/g, 'https://host.docker.internal');
+}
+
 export async function executeCurl(curlCommand: string, timeout = 30000): Promise<ExecutionResult> {
   try {
-    // Add -s flag for silent mode and -w for HTTP code if not present
-    let command = curlCommand;
+    // Rewrite localhost URLs when running inside Docker
+    let command = rewriteLocalhostForDocker(curlCommand);
 
+    // Add -s flag for silent mode and -w for HTTP code if not present
     if (!command.includes(' -s')) {
       command += ' -s';
     }

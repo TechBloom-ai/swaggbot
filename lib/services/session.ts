@@ -51,6 +51,22 @@ function deriveBaseUrl(swaggerUrl: string, swaggerDoc: SwaggerDoc): string | nul
   return urlOrigin;
 }
 
+/**
+ * When running inside Docker, rewrite localhost/127.0.0.1 URLs to host.docker.internal
+ * so fetch/curl can reach services running on the host machine.
+ */
+function rewriteLocalhostForDocker(url: string): string {
+  if (process.env.RUNNING_IN_DOCKER !== 'true') {
+    return url;
+  }
+
+  return url
+    .replace(/http:\/\/localhost/g, 'http://host.docker.internal')
+    .replace(/https:\/\/localhost/g, 'https://host.docker.internal')
+    .replace(/http:\/\/127\.0\.0\.1/g, 'http://host.docker.internal')
+    .replace(/https:\/\/127\.0\.0\.1/g, 'https://host.docker.internal');
+}
+
 export interface CreateSessionInput {
   name: string;
   swaggerUrl: string;
@@ -73,8 +89,9 @@ export interface SessionStats {
 
 export class SessionService {
   async create(input: CreateSessionInput): Promise<Session> {
-    // Fetch Swagger document from URL
-    const response = await fetch(input.swaggerUrl);
+    // Fetch Swagger document from URL (rewrite localhost when inside Docker)
+    const fetchUrl = rewriteLocalhostForDocker(input.swaggerUrl);
+    const response = await fetch(fetchUrl);
     if (!response.ok) {
       throw new Error(
         `Failed to fetch Swagger document: ${response.status} ${response.statusText}`
@@ -87,7 +104,8 @@ export class SessionService {
     const swaggerDoc = parseSwagger(content);
 
     // Derive base URL from Swagger URL origin (priority) with fallback to Swagger doc
-    const baseUrl = deriveBaseUrl(input.swaggerUrl, swaggerDoc);
+    // Rewrite localhost for Docker so curl commands target the host machine
+    const baseUrl = rewriteLocalhostForDocker(deriveBaseUrl(input.swaggerUrl, swaggerDoc) || '');
 
     // Create session
     const now = new Date();
@@ -221,7 +239,12 @@ export class SessionService {
 
   getFormattedSwagger(session: Session): string {
     const doc = JSON.parse(session.swaggerDoc) as Record<string, unknown>;
-    return formatSwaggerForLLM(doc as unknown as Parameters<typeof formatSwaggerForLLM>[0]);
+    // Pass the session's derived baseUrl to ensure LLM uses the correct URL
+    // This is crucial for Docker scenarios where we need to use the host IP instead of localhost
+    return formatSwaggerForLLM(
+      doc as unknown as Parameters<typeof formatSwaggerForLLM>[0],
+      session.baseUrl ?? undefined
+    );
   }
 
   getSwaggerDoc(session: Session): Record<string, unknown> {
