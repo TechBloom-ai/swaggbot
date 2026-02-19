@@ -9,6 +9,7 @@ import {
   ExternalServiceError,
 } from '@/lib/errors';
 import { log } from '@/lib/logger';
+import { validateSwaggerUrlFull } from '@/lib/utils/url-validator';
 
 const createSessionSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
         fields[path].push(err.message);
       });
       throw new ValidationError('Invalid input', fields);
+    }
+
+    // Validate URL security (protocol and IP restrictions)
+    const urlValidation = validateSwaggerUrlFull(validation.data.swaggerUrl);
+    if (!urlValidation.valid) {
+      throw new ValidationError('Invalid URL', { swaggerUrl: [urlValidation.error!] });
     }
 
     log.info('Creating new session', {

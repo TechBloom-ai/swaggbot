@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { sessions, NewSession, Session, messages } from '@/lib/db/schema';
 import { SwaggerDoc } from '@/lib/types';
 import { parseSwagger, extractBaseUrl, formatSwaggerForLLM } from '@/lib/utils/swagger';
+import { validateSwaggerUrlFull } from '@/lib/utils/url-validator';
 
 /**
  * Extract the origin (protocol + host) from a URL
@@ -89,6 +90,12 @@ export interface SessionStats {
 
 export class SessionService {
   async create(input: CreateSessionInput): Promise<Session> {
+    // Validate URL security (defense-in-depth: also validated at API layer)
+    const urlValidation = validateSwaggerUrlFull(input.swaggerUrl);
+    if (!urlValidation.valid) {
+      throw new Error(`Invalid Swagger URL: ${urlValidation.error}`);
+    }
+
     // Fetch Swagger document from URL (rewrite localhost when inside Docker)
     const fetchUrl = rewriteLocalhostForDocker(input.swaggerUrl);
     const response = await fetch(fetchUrl);
