@@ -271,3 +271,9 @@ body {
 .typing-dot:nth-child(3) {
   animation-delay: 0s;
 }
+
+/* TechBloom branding styles */
+.techbloom-branding {
+  color: hsl(4, 69%, 62%);
+  font-family: 'Questrial', sans-serif;
+}

@@ -274,13 +274,7 @@ export function TechBloomBanner() {
       {/* Content Overlay */}
       <div className='relative z-10 h-full flex items-center justify-center'>
         <div className='text-center'>
-          <p
-            className='text-lg md:text-xl tracking-wide'
-            style={{
-              color: 'hsl(4, 69%, 62%)',
-              fontFamily: '"Questrial", sans-serif',
-            }}
-          >
+          <p className='text-lg md:text-xl tracking-wide techbloom-branding'>
             A product by
             <a href='https://www.techbloom.com.br' target='_blank' rel='noopener noreferrer'>
               <span className='font-semibold'> TechBloom</span>
