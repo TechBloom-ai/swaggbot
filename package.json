@@ -1,6 +1,6 @@
 {
   "name": "swaggbot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -48,6 +48,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
+    "shell-quote": "^1.8.3",
     "three": "^0.182.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
@@ -58,6 +59,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/shell-quote": "^1.7.5",
     "@types/three": "^0.182.0",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
