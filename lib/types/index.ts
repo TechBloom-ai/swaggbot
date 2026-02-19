@@ -68,11 +68,22 @@ export interface SelfAwarenessResult {
   response: string;
 }
 
+// Workflow execution result
+export interface WorkflowExecutionResult {
+  type: 'workflow_result';
+  message: string;
+  curl: string;
+  shouldExecute: boolean;
+  executed: boolean;
+  result?: unknown;
+}
+
 // Union type for all chat response types
 export type ChatResponse =
   | CurlGenerationResult
   | ApiInfoResult
   | SelfAwarenessResult
+  | WorkflowExecutionResult
   | {
       type: 'error';
       message: string;

@@ -4,6 +4,7 @@ import { ChatResponse, LLMMessage } from '@/lib/types';
 import { Message } from '@/lib/db/schema';
 import { log } from '@/lib/logger';
 
+import { RequestExecutor } from './request-executor';
 import { sessionService } from './session';
 import { tokenExtractorService } from './tokenExtractor';
 import { messageService } from './message';
@@ -540,369 +541,45 @@ export class ChatService {
         }
       }
 
-      // Execute workflow steps
-      const results: Array<{
-        step: number;
-        description: string;
-        success: boolean;
-        result?: unknown;
-        error?: string;
-      }> = [];
-      const extractedData: Record<string, unknown> = {};
+      // Execute workflow steps using RequestExecutor
+      const executor = new RequestExecutor({
+        baseUrl: session.baseUrl || '',
+        authToken: session.authToken || undefined,
+      });
 
-      for (const step of steps) {
-        console.log(`[ChatService] Executing step ${step.stepNumber}: ${step.description}`);
+      const execResult = await executor.executeSteps(steps);
 
-        try {
-          // Replace placeholders in endpoint with extracted data
-          let endpoint = step.action.endpoint;
-          for (const [key, value] of Object.entries(extractedData)) {
-            // Escape special regex characters in the key for filter syntax
-            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            endpoint = endpoint.replace(
-              new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g'),
-              String(value)
-            );
-          }
+      // Format results for chat response
+      const results = execResult.steps.map(step => ({
+        step: step.step,
+        description: step.description,
+        success: step.success,
+        result: step.response,
+        error: step.error,
+      }));
 
-          // Build curl command
-          const method = step.action.method || 'GET';
-          const baseUrl = session.baseUrl || '';
-          const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
+      const allSuccess = execResult.success;
 
-          console.log(`[ChatService] Step ${step.stepNumber} building URL:`, {
-            endpoint,
-            baseUrl,
-            url,
-            hasAuth: !!session.authToken,
-          });
-
-          let curl = `curl -X ${method} '${url}' -H 'Content-Type: application/json'`;
-
-          // Add auth token if available
-          if (session.authToken) {
-            // Ensure Bearer prefix is present
-            const authHeader = session.authToken.startsWith('Bearer ')
-              ? session.authToken
-              : `Bearer ${session.authToken}`;
-            curl += ` -H 'Authorization: ${authHeader}'`;
-          }
-
-          // Add body if present
-          if (step.action.body && Object.keys(step.action.body).length > 0) {
-            // Build field-to-step mapping dynamically based on extractFields from previous steps
-            const fieldToStepMap: Record<string, number> = {};
-
-            // Look at all previous steps to build the mapping
-            for (const s of steps) {
-              if (s.stepNumber >= step.stepNumber) {
-                continue;
-              } // Only look at previous steps
-
-              if (s.extractFields && s.extractFields.length > 0) {
-                // Map each extracted field to this step
-                for (const field of s.extractFields) {
-                  // Handle different field patterns:
-                  // - "id" -> map to generic field names based on step description
-                  // - "[0].id" or "0.id" -> array index extraction
-                  // - "type_service_id" -> specific field name
-
-                  if (field === 'id' || field === '[0].id' || field === '0.id') {
-                    // Extract semantic field name from step description
-                    // e.g., "Fetch type services" -> "type_service_id"
-                    const semanticField = this.extractSemanticFieldName(s.description);
-                    if (semanticField) {
-                      fieldToStepMap[semanticField] = s.stepNumber;
-                      console.log(
-                        `[ChatService] Mapped ${semanticField} to step ${s.stepNumber} (from: "${s.description}")`
-                      );
-                    }
-                  } else {
-                    // Direct field name like "type_service_id"
-                    fieldToStepMap[field] = s.stepNumber;
-                    console.log(`[ChatService] Mapped ${field} to step ${s.stepNumber}`);
-                  }
-                }
-              }
-            }
-
-            // Replace placeholders in body
-            let body = JSON.stringify(step.action.body);
-            console.log(`[ChatService] Original body with placeholders:`, body);
-
-            // First, handle semantic keys (like {{type_service_id}})
-            for (const [key, value] of Object.entries(extractedData)) {
-              // Escape special regex characters in key
-              const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const placeholder = `"\\{\\{${escapedKey}\\}\\}"`;
-              if (body.includes(`{{${key}}}`)) {
-                body = body.replace(new RegExp(placeholder, 'g'), JSON.stringify(value));
-                console.log(`[ChatService] Replaced {{${key}}} with:`, value);
-              }
-            }
-
-            // Parse body to find which fields still have placeholders
-            let bodyObj: Record<string, unknown>;
-            try {
-              bodyObj = JSON.parse(body);
-            } catch (e) {
-              console.error(`[ChatService] Failed to parse body:`, e);
-              bodyObj = step.action.body;
-            }
-
-            for (const [fieldName, fieldValue] of Object.entries(bodyObj)) {
-              if (
-                typeof fieldValue === 'string' &&
-                fieldValue.startsWith('{{') &&
-                fieldValue.endsWith('}}')
-              ) {
-                // This field still has a placeholder, try to resolve it
-                console.log(
-                  `[ChatService] Found unresolved placeholder in ${fieldName}: ${fieldValue}`
-                );
-
-                // Extract the placeholder content (e.g., "{{[0].id}}" -> "[0].id")
-                const placeholderContent = fieldValue.slice(2, -2);
-
-                // Try multiple strategies to find the value
-                let resolvedValue: unknown = undefined;
-                let resolutionSource = '';
-
-                // Strategy 1: Look for step that extracts this specific field
-                const targetStepNumber = fieldToStepMap[fieldName];
-                if (targetStepNumber) {
-                  const stepKey = `step${targetStepNumber}_0_id`;
-                  resolvedValue = extractedData[stepKey];
-                  resolutionSource = stepKey;
-
-                  if (resolvedValue === undefined) {
-                    // Try the semantic key directly
-                    resolvedValue = extractedData[fieldName];
-                    resolutionSource = fieldName;
-                  }
-                }
-
-                // Strategy 2: If placeholder contains array notation like [0].id, look for it directly
-                if (resolvedValue === undefined && placeholderContent.includes('[')) {
-                  // Convert {{[0].id}} format to step-specific key
-                  const normalizedPlaceholder = placeholderContent.replace(/\[(\d+)\]/g, '$1');
-                  for (const prevStep of steps) {
-                    if (prevStep.stepNumber >= step.stepNumber) {
-                      continue;
-                    }
-                    const stepKey = `step${prevStep.stepNumber}_${normalizedPlaceholder.replace(/\./g, '_')}`;
-                    if (extractedData[stepKey] !== undefined) {
-                      resolvedValue = extractedData[stepKey];
-                      resolutionSource = stepKey;
-                      break;
-                    }
-                  }
-                }
-
-                // Strategy 3: Look for any step that might have extracted an ID
-                if (resolvedValue === undefined && fieldName.endsWith('_id')) {
-                  for (const prevStep of steps) {
-                    if (prevStep.stepNumber >= step.stepNumber) {
-                      continue;
-                    }
-                    // Look for any id extracted from this step
-                    const stepIdKey = `step${prevStep.stepNumber}_0_id`;
-                    if (extractedData[stepIdKey] !== undefined) {
-                      // Check if this step's description matches the field semantically
-                      const semanticMatch = this.fieldMatchesStepDescription(
-                        fieldName,
-                        prevStep.description
-                      );
-                      if (semanticMatch) {
-                        resolvedValue = extractedData[stepIdKey];
-                        resolutionSource = stepIdKey;
-                        break;
-                      }
-                    }
-                  }
-                }
-
-                if (resolvedValue !== undefined) {
-                  body = body.replace(`"${fieldValue}"`, JSON.stringify(resolvedValue));
-                  console.log(
-                    `[ChatService] Replaced ${fieldValue} in ${fieldName} with:`,
-                    resolvedValue,
-                    `(from: ${resolutionSource})`
-                  );
-                } else {
-                  console.warn(
-                    `[ChatService] Could not resolve placeholder ${fieldValue} in ${fieldName}`
-                  );
-                  console.warn(
-                    `[ChatService] Available extracted data keys:`,
-                    Object.keys(extractedData)
-                  );
-                }
-              }
-            }
-
-            curl += ` -d '${body}'`;
-          }
-
-          // Log the curl command
-          console.log(`[ChatService] Step ${step.stepNumber} curl:`, curl);
-
-          // Execute the curl
-          const executionResult = await executeCurl(curl);
-
-          console.log(`[ChatService] Step ${step.stepNumber} execution result:`, {
-            success: executionResult.success,
-            exitCode: executionResult.exitCode,
-            hasResponse: !!executionResult.response,
-            httpCode: executionResult.httpCode,
-            stderr: executionResult.stderr || null,
-            stdout: executionResult.stdout ? executionResult.stdout.substring(0, 500) : null,
-          });
-
-          // Check for token expiration (401 Unauthorized)
-          if (executionResult.httpCode === 401) {
-            console.warn(
-              `[ChatService] Step ${step.stepNumber} received 401 Unauthorized - token expired`
-            );
-            results.push({
-              step: step.stepNumber,
-              description: step.description,
-              success: false,
-              error: 'Authentication token expired',
-            });
-
-            // Build error message with token expiration notice
-            const stepSummaries = results
-              .map(
-                r =>
-                  `- ${r.success ? '✅' : '❌'} **Step ${r.step}:** ${r.description}${r.error ? ` (${r.error})` : ''}`
-              )
-              .join('\n');
-
-            const errorMessage = `### Workflow stopped at step ${step.stepNumber}\n\n${stepSummaries}\n\n⚠️ **Authentication token expired.** Please redo the login again or ask me to do this for you.`;
-
-            return {
-              type: 'error',
-              message: errorMessage,
-            };
-          }
-
-          if (executionResult.success && executionResult.response) {
-            // Extract data for future steps
-            if (step.extractFields && step.extractFields.length > 0) {
-              for (const field of step.extractFields) {
-                // First, check if field uses filter syntax (e.g., "[name=Mauricio Henrique].id")
-                const filterMatch = field.match(/^\[([^=]+)=([^\]]+)\](?:\.(.*))?$/);
-
-                if (filterMatch) {
-                  // Filter syntax extraction
-                  // Store using the filter pattern as the key so it matches the placeholder
-                  const value = this.extractFieldFromResponse(executionResult.response, field);
-                  if (value !== undefined) {
-                    // Use the filter pattern itself as the storage key
-                    extractedData[field] = value;
-                    // Also store with step-specific key
-                    extractedData[`step${step.stepNumber}_${field}`] = value;
-                    console.log(
-                      `[ChatService] Step ${step.stepNumber} extracted ${field} as ${field}:`,
-                      value
-                    );
-                  }
-                } else if (field.match(/^(\[?(\d+)\]?)\.(.+)$/)) {
-                  // Array index path like "0.id" or "[0].id"
-                  const arrayIndexMatch = field.match(/^(\[?(\d+)\]?)\.(.+)$/);
-                  const [, , index, propPath] = arrayIndexMatch!;
-                  const value = this.extractFieldFromResponse(executionResult.response, field);
-
-                  // Generate a unique storage key from the step description
-                  let storageKey: string;
-                  const semanticField = this.extractSemanticFieldName(step.description);
-
-                  if (semanticField) {
-                    storageKey = semanticField;
-                  } else {
-                    // Fallback: use step number to make it unique
-                    storageKey = `step${step.stepNumber}_${propPath.replace(/\./g, '_')}`;
-                  }
-
-                  // Store with step-specific key to prevent overwriting
-                  if (value !== undefined) {
-                    extractedData[storageKey] = value;
-                    const stepSpecificKey = `step${step.stepNumber}_${index}_${propPath}`;
-                    extractedData[stepSpecificKey] = value;
-                    extractedData[`step${step.stepNumber}_${field}`] = value;
-                    console.log(
-                      `[ChatService] Step ${step.stepNumber} extracted ${field} as ${storageKey} and ${stepSpecificKey}:`,
-                      value
-                    );
-                  }
-                } else {
-                  // Regular field extraction - semantic key like "payment_method_id"
-                  // Extract from first array item's id property
-                  const value = this.extractFieldFromResponse(executionResult.response, '0.id');
-                  if (value !== undefined) {
-                    // Use semantic field name if available, otherwise use the raw field
-                    const semanticField = this.extractSemanticFieldName(step.description);
-                    const storageKey = semanticField || field;
-
-                    extractedData[storageKey] = value;
-                    // Also store with step-specific key
-                    extractedData[`step${step.stepNumber}_${field}`] = value;
-                    console.log(
-                      `[ChatService] Step ${step.stepNumber} extracted ${field} as ${storageKey}:`,
-                      value
-                    );
-                  }
-                }
-              }
-            }
-
-            results.push({
-              step: step.stepNumber,
-              description: step.description,
-              success: true,
-              result: executionResult.response,
-            });
-          } else {
-            results.push({
-              step: step.stepNumber,
-              description: step.description,
-              success: false,
-              error: executionResult.stderr || 'Execution failed',
-            });
-
-            // Stop workflow if a step fails
-            break;
-          }
-        } catch (error) {
-          console.error(`[ChatService] Step ${step.stepNumber} failed:`, error);
-          results.push({
-            step: step.stepNumber,
-            description: step.description,
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          });
-          break;
-        }
+      if (allSuccess) {
+        return {
+          type: 'workflow_result',
+          message: `Workflow completed successfully with ${results.length} steps.`,
+          curl: 'Workflow execution completed',
+          shouldExecute: true,
+          executed: true,
+          result: results,
+        } as ChatResponse;
+      } else {
+        const failedStep = results.find(r => !r.success);
+        return {
+          type: 'error',
+          message: `Workflow failed at step ${failedStep?.step}: ${failedStep?.error || 'Unknown error'}`,
+          curl: 'Workflow execution failed',
+          shouldExecute: true,
+          executed: false,
+          result: results,
+        } as ChatResponse;
       }
-
-      // Build summary response
-      const allSuccess = results.every(r => r.success);
-      const stepSummaries = results
-        .map(
-          r =>
-            `- ${r.success ? '✅' : '❌'} **Step ${r.step}:** ${r.description}${r.error ? ` (${r.error})` : ''}`
-        )
-        .join('\n');
-
-      return {
-        type: 'curl_command',
-        explanation: `### Workflow executed with ${results.length} steps\n\n${stepSummaries}`,
-        curl: 'Workflow execution completed',
-        shouldExecute: true,
-        executed: allSuccess,
-        result: results,
-      } as ChatResponse;
     } catch (error) {
       console.error('[ChatService] Workflow execution failed:', error);
       return {
@@ -912,174 +589,10 @@ export class ChatService {
     }
   }
 
-  private extractFieldFromResponse(response: unknown, field: string): unknown {
-    if (!response || typeof response !== 'object') {
-      return undefined;
-    }
-
-    // Check for filter syntax: [field=value].path or [field=value]
-    const filterMatch = field.match(/^\[([^=]+)=([^\]]+)\](?:\.(.*))?$/);
-    if (filterMatch) {
-      const [, filterField, filterValue, extractPath] = filterMatch;
-      return this.extractFromFilteredArray(response, filterField, filterValue, extractPath);
-    }
-
-    const parts = field.split('.');
-    let current: unknown = response;
-
-    for (const part of parts) {
-      if (current === null || current === undefined) {
-        return undefined;
-      }
-
-      if (Array.isArray(current) && !isNaN(Number(part))) {
-        current = current[Number(part)];
-      } else if (typeof current === 'object') {
-        current = (current as Record<string, unknown>)[part];
-      } else {
-        return undefined;
-      }
-    }
-
-    return current;
-  }
+  // Note: Helper methods moved to RequestExecutor service
 
   /**
-   * Extract values from array by filtering on a field value
-   * Supports case-insensitive matching
-   * Returns single value if one match, array if multiple matches
-   */
-  private extractFromFilteredArray(
-    response: unknown,
-    filterField: string,
-    filterValue: string,
-    extractPath?: string
-  ): unknown {
-    if (!Array.isArray(response)) {
-      console.log(`[ChatService] Filter response is not an array:`, typeof response);
-      return undefined;
-    }
-
-    console.log(
-      `[ChatService] Filtering array by ${filterField}=${filterValue}, extractPath=${extractPath || 'none'}`
-    );
-
-    // Find all matching items (case-insensitive)
-    const matches = response.filter(item => {
-      if (item && typeof item === 'object') {
-        const itemValue = (item as Record<string, unknown>)[filterField];
-        const itemStr = String(itemValue || '').toLowerCase();
-        const filterStr = filterValue.toLowerCase();
-        return itemStr === filterStr;
-      }
-      return false;
-    });
-
-    console.log(`[ChatService] Found ${matches.length} matches for ${filterField}=${filterValue}`);
-
-    if (matches.length === 0) {
-      return undefined;
-    }
-
-    // Extract the specified field from each match
-    const extractField = (item: unknown): unknown => {
-      if (!extractPath) {
-        return item;
-      }
-      return this.extractFieldFromResponse(item, extractPath);
-    };
-
-    if (matches.length === 1) {
-      // Single match - return the extracted value directly
-      const result = extractField(matches[0]);
-      console.log(`[ChatService] Single match extracted:`, result);
-      return result;
-    } else {
-      // Multiple matches - return array of extracted values
-      const results = matches.map(extractField);
-      console.log(`[ChatService] Multiple matches extracted:`, results.length, 'items');
-      return results;
-    }
-  }
-
-  /**
-   * Extract a semantic field name from a step description.
-   * E.g., "Fetch type services to get a valid type_service_id" -> "type_service_id"
-   * E.g., "Fetch payment methods" -> "payment_method_id"
-   */
-  private extractSemanticFieldName(description: string): string | null {
-    const desc = description.toLowerCase();
-
-    // Look for explicit field mentions in the description
-    const fieldMatch = desc.match(/(\w+_id)/);
-    if (fieldMatch) {
-      return fieldMatch[1];
-    }
-
-    // Map common patterns to field names
-    if (desc.includes('type service')) {
-      return 'type_service_id';
-    } else if (desc.includes('payment')) {
-      return 'payment_method_id';
-    } else if (desc.includes('role')) {
-      return 'role_id';
-    } else if (desc.includes('employment relationship')) {
-      return 'employment_relationship_id';
-    } else if (desc.includes('professional area')) {
-      return 'professional_area_id';
-    } else if (desc.includes('user')) {
-      return 'user_id';
-    } else if (desc.includes('patient')) {
-      return 'patient_id';
-    } else if (desc.includes('doctor') || desc.includes('physician')) {
-      return 'doctor_id';
-    } else if (desc.includes('department')) {
-      return 'department_id';
-    } else if (desc.includes('category')) {
-      return 'category_id';
-    } else if (desc.includes('product')) {
-      return 'product_id';
-    } else if (desc.includes('order')) {
-      return 'order_id';
-    } else if (desc.includes('client')) {
-      return 'client_id';
-    } else if (desc.includes('customer')) {
-      return 'customer_id';
-    } else if (desc.includes('service')) {
-      return 'service_id';
-    }
-
-    // Try to extract from "Fetch X to get Y" pattern
-    const fetchMatch = desc.match(/fetch\s+(\w+(?:\s+\w+)*)/);
-    if (fetchMatch) {
-      // Convert "type services" to "type_service_id"
-      const resourceName = fetchMatch[1].trim();
-      // Remove plural 's' if present, replace spaces with underscores, add _id
-      const singular = resourceName.replace(/s$/, '');
-      return singular.replace(/\s+/g, '_') + '_id';
-    }
-
-    return null;
-  }
-
-  /**
-   * Check if a field name semantically matches a step description.
-   * E.g., "type_service_id" matches "Fetch type services"
-   */
-  private fieldMatchesStepDescription(fieldName: string, description: string): boolean {
-    const field = fieldName.toLowerCase().replace(/_id$/, '');
-    const desc = description.toLowerCase();
-
-    // Remove underscores from field for comparison
-    const fieldWords = field.replace(/_/g, ' ');
-
-    // Check if field words appear in description
-    return desc.includes(fieldWords) || fieldWords.split(' ').every(word => desc.includes(word));
-  }
-
-  /**
-   * Validate that a POST step has required foreign key fetching steps before it.
-   * Returns array of missing foreign key field names.
+   * Validate POST steps have required foreign key fetching steps
    */
   private validateForeignKeySteps(
     postStep: {
@@ -1096,39 +609,28 @@ export class ChatService {
   ): string[] {
     const missingForeignKeys: string[] = [];
 
-    // Parse the swagger doc to find the POST endpoint schema
-    // Look for the endpoint in the formatted swagger
     const endpointMatch = swaggerDoc.match(
       new RegExp(
         `### POST ${postStep.action.endpoint.replace(/\//g, '\\/')}([\\s\\S]*?)(?=###|\\n## |$)`
       )
     );
     if (!endpointMatch) {
-      console.log(
-        `[ChatService] Could not find swagger definition for POST ${postStep.action.endpoint}`
-      );
       return missingForeignKeys;
     }
 
     const endpointDoc = endpointMatch[0];
-
-    // Look for Request Body > Fields section
     const fieldsMatch = endpointDoc.match(
       /Request Body:[\s\S]*?Fields:([\s\S]*?)(?=Responses:|###|## |$)/
     );
     if (!fieldsMatch) {
-      console.log(`[ChatService] No fields section found for POST ${postStep.action.endpoint}`);
       return missingForeignKeys;
     }
 
     const fieldsSection = fieldsMatch[1];
-
-    // Find all fields that are marked as REQUIRED and end with _id
     const fieldLines = fieldsSection.split('\n');
     const requiredForeignKeys: string[] = [];
 
     for (const line of fieldLines) {
-      // Match lines like "- type_service_id: string (REQUIRED) [FOREIGN KEY]"
       const fieldMatch = line.match(/-\s+(\w+_id):\s+\w+\s+\(REQUIRED\).*\[FOREIGN KEY\]/i);
       if (fieldMatch) {
         requiredForeignKeys.push(fieldMatch[1]);
@@ -1136,35 +638,22 @@ export class ChatService {
     }
 
     if (requiredForeignKeys.length === 0) {
-      console.log(
-        `[ChatService] No required foreign keys found for POST ${postStep.action.endpoint}`
-      );
       return missingForeignKeys;
     }
 
-    console.log(
-      `[ChatService] POST ${postStep.action.endpoint} requires foreign keys:`,
-      requiredForeignKeys
-    );
-
-    // Check if there are GET steps before this POST step that fetch these foreign keys
     const previousSteps = allSteps.filter(s => s.stepNumber < postStep.stepNumber);
 
     for (const foreignKey of requiredForeignKeys) {
-      // Extract the resource name from the foreign key (e.g., "type_service_id" -> "type service")
       const resourceName = foreignKey.replace(/_id$/, '').replace(/_/g, ' ');
 
-      // Check if any previous step fetches this resource
       const hasFetchingStep = previousSteps.some(step => {
         const stepDesc = step.description.toLowerCase();
         const stepEndpoint = step.action.endpoint.toLowerCase();
 
-        // Check if step description mentions the resource
         const descMatches =
           stepDesc.includes(resourceName.toLowerCase()) ||
           stepDesc.includes(resourceName.replace(/s$/, '').toLowerCase());
 
-        // Check if step endpoint is related to the resource
         const endpointMatches =
           stepEndpoint.includes(resourceName.replace(/_/g, '-')) ||
           stepEndpoint.includes(resourceName.replace(/_/g, ''));
@@ -1174,7 +663,6 @@ export class ChatService {
 
       if (!hasFetchingStep) {
         missingForeignKeys.push(foreignKey);
-        console.warn(`[ChatService] Missing foreign key fetching step for: ${foreignKey}`);
       }
     }
 
