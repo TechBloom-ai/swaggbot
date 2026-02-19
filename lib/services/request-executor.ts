@@ -16,6 +16,7 @@ export interface RequestContext {
 export interface ExecutionOptions {
   workflowId?: string;
   onStepComplete?: (step: number, result: StepResult) => void | Promise<void>;
+  onAuthSuccess?: (token: string, tokenPath?: string) => void | Promise<void>;
 }
 
 export interface StepResult {
