@@ -132,11 +132,36 @@ export class RequestExecutor {
    * Build curl command from step and accumulated data
    */
   buildCurlCommand(step: WorkflowStep, extractedData: Record<string, unknown>): string {
-    // Resolve endpoint placeholders
+    // Resolve endpoint placeholders using sophisticated resolution logic
     let endpoint = step.action.endpoint || '';
-    for (const [key, value] of Object.entries(extractedData)) {
-      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      endpoint = endpoint.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g'), String(value));
+    const fieldToStepMap = this.buildFieldToStepMap(step, extractedData);
+
+    // Find all {{placeholders}} in endpoint and resolve them
+    const placeholderRegex = /\{\{([^}]+)\}\}/g;
+    let match;
+    const placeholders: string[] = [];
+
+    // Collect all placeholders first (to avoid regex lastIndex issues)
+    while ((match = placeholderRegex.exec(endpoint)) !== null) {
+      placeholders.push(match[1]);
+    }
+
+    // Resolve each placeholder
+    for (const placeholderName of placeholders) {
+      const resolvedValue = this.resolvePlaceholder(
+        placeholderName,
+        placeholderName,
+        fieldToStepMap,
+        extractedData
+      );
+
+      if (resolvedValue !== undefined) {
+        const escapedPlaceholder = placeholderName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        endpoint = endpoint.replace(
+          new RegExp(`\\{\\{${escapedPlaceholder}\\}\\}`, 'g'),
+          String(resolvedValue)
+        );
+      }
     }
 
     // Build URL

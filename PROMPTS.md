@@ -361,41 +361,98 @@ Guidelines for workflow planning:
 
 **Advanced - Array Filtering and Search:**
 
-When you need to find a specific item in an array response (e.g., "find collaborator named Mauricio Henrique"):
+When you need to find a specific item in an array response:
 
-Use the bracket filter syntax: `[field=value].path`
+**1. Filter by Field Value (for finding by name, email, etc.):**
+Use syntax: `[field=value].path`
 
 Examples:
-- `[name=Mauricio Henrique].id` - Find item where name="Mauricio Henrique", return the id field
-- `[email=john@test.com].phone` - Find item where email="john@test.com", return the phone field
+- `[name=Mauricio Henrique].id` - Find item where name="Mauricio Henrique", return the id
+- `[email=john@test.com].phone` - Find item where email="john@test.com", return the phone
 - `[status=active].id` - Find first active item, return its id
+- `[name=Felipe Rocha].id` - Find Felipe Rocha by name
 
-**How it works:**
+**Natural Language Patterns → Filter Syntax:**
+| User Says | extractFields Value |
+|-----------|-------------------|
+| "get the Felipe Rocha collaborator" | `[name=Felipe Rocha].id` |
+| "find the user named John" | `[name=John].id` |
+| "get by email test@example.com" | `[email=test@example.com].id` |
+| "take the id of Mauricio Henrique" | `[name=Mauricio Henrique].id` |
+| "get the active user" | `[status=active].id` |
+
+**2. Array Index Access (for "first", "second", etc.):**
+Use syntax: `[index].path` or just `index.path`
+
+Examples:
+- `[0].id` or `0.id` - Get the FIRST item's id
+- `[1].id` or `1.id` - Get the SECOND item's id  
+- `[2].id` - Get the THIRD item's id
+- `0.name` - Get the first item's name
+
+**Natural Language Patterns → Index Syntax:**
+| User Says | extractFields Value |
+|-----------|-------------------|
+| "get the first user" | `[0].id` |
+| "get the second collaborator" | `[1].id` |
+| "take the third item" | `[2].id` |
+| "get the last one" | (use filter by unique field instead) |
+
+**IMPORTANT - Consistency Rule:**
+If you use `[name=Felipe Rocha].id` in extractFields, you MUST use `{{[name=Felipe Rocha].id}}` in the subsequent step's endpoint.
+If you use `1.id` in extractFields, you MUST use `{{1.id}}` in the subsequent step's endpoint.
+The placeholder in the endpoint must EXACTLY match the extractFields value.
+
+**How filtering works:**
 1. The system searches through the array for items matching the filter criteria
-2. Matching is case-insensitive ("mauricio" matches "Mauricio")
+2. Matching is case-insensitive ("felipe" matches "Felipe")
 3. If ONE match found: returns the extracted value directly
 4. If MULTIPLE matches found: returns an array of values
 5. If NO match found: extraction fails
 
-**Usage in extractFields:**
+**Complete Example - Finding by Name:**
+User: "Get all collaborators and get Felipe Rocha's details"
 ```json
 {
-  "stepNumber": 1,
-  "description": "Find collaborator Mauricio Henrique",
-  "action": { "endpoint": "/collaborators", "method": "GET" },
-  "extractFields": ["[name=Mauricio Henrique].id"]
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators to find Felipe Rocha",
+      "action": { "endpoint": "/collaborators", "method": "GET" },
+      "extractFields": ["[name=Felipe Rocha].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get Felipe Rocha's details using his ID",
+      "action": {
+        "endpoint": "/collaborator/{{[name=Felipe Rocha].id}}",
+        "method": "GET"
+      }
+    }
+  ]
 }
 ```
 
-**Usage in subsequent steps:**
+**Complete Example - Getting by Index:**
+User: "Get all collaborators and get the second one's details"
 ```json
 {
-  "stepNumber": 2,
-  "description": "Get details for found collaborator",
-  "action": {
-    "endpoint": "/collaborator/{{[name=Mauricio Henrique].id}}",
-    "method": "GET"
-  }
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators",
+      "action": { "endpoint": "/collaborators", "method": "GET" },
+      "extractFields": ["[1].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get the second collaborator's details",
+      "action": {
+        "endpoint": "/collaborator/{{[1].id}}",
+        "method": "GET"
+      }
+    }
+  ]
 }
 ```
 
@@ -574,6 +631,66 @@ Response:
         "endpoint": "/collaborator/{{[name=Mauricio Henrique].id}}",
         "method": "GET",
         "purpose": "Get detailed collaborator data using the found ID"
+      }
+    }
+  ],
+  "estimatedTotalSteps": 2
+}
+
+**Example - Finding by Name with Different Patterns:**
+User: "Get all collaborators and get the Felipe Rocha collaborator and get by id"
+Response:
+{
+  "workflowName": "Find Collaborator by Name",
+  "description": "Retrieves all collaborators, finds Felipe Rocha, and fetches his details by ID",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators to find Felipe Rocha",
+      "action": {
+        "endpoint": "/collaborators",
+        "method": "GET",
+        "purpose": "Fetch all collaborators to search for Felipe Rocha"
+      },
+      "extractFields": ["[name=Felipe Rocha].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get Felipe Rocha's details using the extracted ID",
+      "action": {
+        "endpoint": "/collaborator/{{[name=Felipe Rocha].id}}",
+        "method": "GET",
+        "purpose": "Retrieve detailed information for Felipe Rocha"
+      }
+    }
+  ],
+  "estimatedTotalSteps": 2
+}
+
+**Example - Getting by Array Index (Second Item):**
+User: "Get all collaborators and get the second collaborator and get by id"
+Response:
+{
+  "workflowName": "Get Second Collaborator",
+  "description": "Retrieves all collaborators and gets the second one's details",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators",
+      "action": {
+        "endpoint": "/collaborators",
+        "method": "GET",
+        "purpose": "Fetch all collaborators"
+      },
+      "extractFields": ["[1].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get the second collaborator's details",
+      "action": {
+        "endpoint": "/collaborator/{{[1].id}}",
+        "method": "GET",
+        "purpose": "Retrieve details of the second collaborator"
       }
     }
   ],
