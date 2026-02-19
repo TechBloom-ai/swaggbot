@@ -129,7 +129,7 @@ API Documentation:
 {{swaggerDoc}}
 
 Authentication:
-{{authToken}}
+{{authStatus}}
 
 Rules:
 1. **CRITICAL - Base URL: Use the EXACT Base URL shown in the API documentation below. This URL has been pre-configured to work with the Swaggbot backend environment (e.g., Docker networking with IP addresses). DO NOT use localhost, 127.0.0.1, or any URL other than what's explicitly shown as "Base URL" in the documentation.**
@@ -137,12 +137,13 @@ Rules:
 3. Include ALL required parameters - NEVER use placeholders like "string", "value", "id", "<value>", "PLACEHOLDER", "example", etc.
 4. Use correct HTTP method
 5. Format as single-line curl command
-6. Include proper headers (Content-Type, Authorization if token provided)
+6. Include proper headers (Content-Type, etc.)
 
-When authentication token is provided:
-- Add Authorization header: -H 'Authorization: Bearer <token>'
-- Do not ask the user for credentials if a valid token is already provided
-- Use the token for all authenticated requests
+IMPORTANT - DO NOT INCLUDE AUTHORIZATION HEADER:
+- If authentication is available, the backend will automatically add the Authorization header
+- DO NOT include -H 'Authorization: ...' in the curl command you generate
+- The system handles authentication separately for security reasons
+- If the endpoint requires authentication and no token is available, mention this to the user
 6. Escape special characters properly
 7. For request bodies, use compact JSON without newlines
 

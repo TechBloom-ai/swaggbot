@@ -23,7 +23,7 @@ export abstract class BaseLLMProvider {
   abstract generateCurl(
     swaggerDoc: string,
     message: string,
-    authToken?: string,
+    hasAuth: boolean,
     history?: LLMMessage[]
   ): Promise<CurlGenerationResult>;
 
@@ -34,7 +34,7 @@ export abstract class BaseLLMProvider {
   abstract planWorkflow(
     swaggerDoc: string,
     request: string,
-    authToken?: string
+    hasAuth: boolean
   ): Promise<WorkflowStep[]>;
 
   // Extract data from API response

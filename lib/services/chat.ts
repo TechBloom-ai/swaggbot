@@ -225,11 +225,11 @@ export class ChatService {
     const formattedSwagger = sessionService.getFormattedSwagger(session);
 
     try {
-      // Generate curl command
+      // Generate curl command - pass boolean indicating if auth is available (never the actual token)
       const curlResult = await this.getLLM().generateCurl(
         formattedSwagger,
         message,
-        session.authToken || undefined,
+        !!session.authToken,
         history
       );
 
@@ -255,7 +255,7 @@ export class ChatService {
         const retryResult = await this.getLLM().generateCurl(
           formattedSwagger,
           retryMessage,
-          session.authToken || undefined
+          !!session.authToken
         );
 
         // Use retry result if it's better
@@ -317,7 +317,18 @@ export class ChatService {
       // Execute if shouldExecute is true or user explicitly asked
       if (shouldActuallyExecute) {
         log.info('Executing curl command...');
-        executionResult = await executeCurl(curlResult.curl);
+
+        // Inject auth header if token is available (LLM doesn't include it for security)
+        let curlCommand = curlResult.curl;
+        if (session.authToken && !curlCommand.includes('Authorization')) {
+          const authHeader = session.authToken.startsWith('Bearer ')
+            ? session.authToken
+            : `Bearer ${session.authToken}`;
+          curlCommand += ` -H 'Authorization: ${authHeader}'`;
+          log.info('Injected Authorization header');
+        }
+
+        executionResult = await executeCurl(curlCommand);
         log.info('Execution result', {
           success: executionResult.success,
           httpCode: executionResult.httpCode,
@@ -482,11 +493,7 @@ export class ChatService {
       // Plan the workflow using LLM
       let steps;
       try {
-        steps = await this.getLLM().planWorkflow(
-          formattedSwagger,
-          message,
-          session.authToken || undefined
-        );
+        steps = await this.getLLM().planWorkflow(formattedSwagger, message, !!session.authToken);
       } catch (planError) {
         console.error('[ChatService] Workflow planning failed:', planError);
         return {

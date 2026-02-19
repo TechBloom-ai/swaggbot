@@ -60,7 +60,7 @@ export class WorkflowService {
       steps = await this.getLLM().planWorkflow(
         formattedSwagger,
         input.description,
-        session.authToken || undefined
+        !!session.authToken
       );
     } catch (error) {
       log.error('Workflow planning failed', error);

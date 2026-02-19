@@ -86,19 +86,19 @@ export class MoonshotProvider extends BaseLLMProvider {
   async generateCurl(
     swaggerDoc: string,
     message: string,
-    authToken?: string,
+    hasAuth: boolean,
     history?: LLMMessage[]
   ): Promise<CurlGenerationResult> {
     const systemPromptTemplate = promptManager.loadPrompt('curl-generation-system');
     const userPromptTemplate = promptManager.loadPrompt('curl-generation-user');
 
-    const authMessage = authToken
-      ? `User has provided token: ${authToken}`
-      : 'No token set. Mention if endpoint requires auth.';
+    const authStatus = hasAuth
+      ? 'Authentication is available. DO NOT include the Authorization header in the curl command - it will be added automatically by the backend.'
+      : 'No authentication token available. Mention if the endpoint requires authentication.';
 
     const systemPrompt = promptManager.render(systemPromptTemplate.template, {
       swaggerDoc,
-      authToken: authMessage,
+      authStatus,
     });
 
     const userPrompt = promptManager.render(userPromptTemplate.template, {
@@ -199,14 +199,14 @@ export class MoonshotProvider extends BaseLLMProvider {
   async planWorkflow(
     swaggerDoc: string,
     request: string,
-    authToken?: string
+    hasAuth: boolean
   ): Promise<WorkflowStep[]> {
     const promptTemplate = promptManager.loadPrompt('workflow-planning');
 
     const prompt = promptManager.render(promptTemplate.template, {
       swaggerDoc,
       userMessage: request,
-      authStatus: authToken
+      authStatus: hasAuth
         ? 'User already has a valid authentication token. DO NOT include authentication steps in the workflow.'
         : 'No authentication token available. Include authentication as first step if needed.',
     });
