@@ -5,6 +5,14 @@ import { sessions, NewSession, Session, messages } from '@/lib/db/schema';
 import { SwaggerDoc } from '@/lib/types';
 import { parseSwagger, extractBaseUrl, formatSwaggerForLLM } from '@/lib/utils/swagger';
 import { validateSwaggerUrlFull } from '@/lib/utils/url-validator';
+import {
+  encrypt,
+  decrypt,
+  serializeEncrypted,
+  deserializeEncrypted,
+  isEncrypted,
+} from '@/lib/utils/encryption';
+import { log } from '@/lib/logger';
 
 /**
  * Extract the origin (protocol + host) from a URL
@@ -139,16 +147,40 @@ export class SessionService {
 
   async findById(id: string): Promise<Session | null> {
     const results = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
-    return results[0] || null;
+    const session = results[0];
+
+    if (!session) {
+      return null;
+    }
+
+    // Decrypt authToken if it exists and is encrypted
+    if (session.authToken && isEncrypted(session.authToken)) {
+      try {
+        const encryptedData = deserializeEncrypted(session.authToken);
+        session.authToken = decrypt(encryptedData);
+      } catch (error) {
+        // If decryption fails, log error but don't expose token
+        log.error(
+          'Failed to decrypt authToken',
+          error instanceof Error ? error : new Error(String(error))
+        );
+        session.authToken = null;
+      }
+    }
+
+    return session;
   }
 
   async updateAuthToken(id: string, authToken: string | null): Promise<Session> {
     const now = new Date();
 
+    // Encrypt authToken if provided
+    const encryptedToken = authToken ? serializeEncrypted(encrypt(authToken)) : null;
+
     await db
       .update(sessions)
       .set({
-        authToken,
+        authToken: encryptedToken,
         updatedAt: now,
         lastAccessedAt: now,
       })
@@ -200,7 +232,8 @@ export class SessionService {
     }
 
     if (input.authToken !== undefined) {
-      updateData.authToken = input.authToken;
+      // Encrypt authToken if provided
+      updateData.authToken = input.authToken ? serializeEncrypted(encrypt(input.authToken)) : null;
     }
 
     await db.update(sessions).set(updateData).where(eq(sessions.id, id));
