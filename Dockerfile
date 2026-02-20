@@ -36,11 +36,15 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
+# Copy and setup entrypoint script
+COPY scripts/docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create data directory
 RUN mkdir -p data
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3003
 
 # Start the application
-CMD ["node", "server.js"]
+CMD ["/usr/local/bin/docker-entrypoint.sh"]
