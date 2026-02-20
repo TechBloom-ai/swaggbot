@@ -15,6 +15,13 @@
       "when": 1771273223668,
       "tag": "0001_yielding_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1771554881087,
+      "tag": "0002_bumpy_fenris",
+      "breakpoints": true
     }
   ]
 }
