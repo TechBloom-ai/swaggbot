@@ -6,9 +6,9 @@ import { Plus, MessageSquare, Trash2, Bot, Settings } from 'lucide-react';
 
 import { SessionListSkeleton, EmptyState, Spinner } from '@/components/ui';
 import { toast } from '@/stores/toastStore';
+import { LogoutButton } from '@/components/auth';
 
 import { TechBloomBanner } from './sessions/TechBloomBanner';
-import LogoutButton from './components/LogoutButton';
 
 interface Session {
   id: string;

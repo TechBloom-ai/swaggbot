@@ -20,7 +20,7 @@ import {
 
 import { toast } from '@/stores/toastStore';
 import { Spinner } from '@/components/ui';
-import LogoutButton from '@/app/components/LogoutButton';
+import { LogoutButton } from '@/components/auth';
 
 interface AppInfo {
   name: string;
