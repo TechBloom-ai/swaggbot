@@ -1,4 +1,4 @@
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, count, max } from 'drizzle-orm';
 
 import { db } from '@/lib/db';
 import { workflows, workflowExecutions, Workflow, WorkflowExecution } from '@/lib/db/schema';
@@ -29,6 +29,27 @@ export interface ExecutionResult {
     error?: string;
   }>;
   summary: string;
+}
+
+export interface PaginatedWorkflows {
+  workflows: WorkflowWithStats[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+}
+
+export interface CursorPaginatedExecutions {
+  executions: WorkflowExecution[];
+  pagination: {
+    cursor: string | null;
+    hasMore: boolean;
+    limit: number;
+  };
 }
 
 export class WorkflowService {
@@ -209,44 +230,114 @@ ${stepSummaries}`,
   }
 
   /**
-   * List all workflows for a session with execution stats
+   * List all workflows for a session with execution stats (optimized with JOIN)
    */
-  async findBySessionId(sessionId: string): Promise<WorkflowWithStats[]> {
-    const sessionWorkflows = await db
-      .select()
+  async findBySessionId(
+    sessionId: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<PaginatedWorkflows> {
+    const offset = (page - 1) * limit;
+
+    // Get total count
+    const totalResult = await db
+      .select({ count: count() })
       .from(workflows)
+      .where(eq(workflows.sessionId, sessionId));
+    const total = totalResult[0]?.count || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get workflows with execution stats using JOIN (fixes N+1 query)
+    const workflowsWithStatsResult = await db
+      .select({
+        workflow: workflows,
+        executionCount: sql<number>`count(${workflowExecutions.id})`,
+        lastExecutedAt: max(workflowExecutions.executedAt),
+      })
+      .from(workflows)
+      .leftJoin(workflowExecutions, eq(workflows.id, workflowExecutions.workflowId))
       .where(eq(workflows.sessionId, sessionId))
-      .orderBy(desc(workflows.createdAt));
+      .groupBy(workflows.id)
+      .orderBy(desc(workflows.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-    // Get execution stats for each workflow
-    const workflowsWithStats: WorkflowWithStats[] = [];
-    for (const workflow of sessionWorkflows) {
-      const executions = await db
-        .select()
-        .from(workflowExecutions)
-        .where(eq(workflowExecutions.workflowId, workflow.id))
-        .orderBy(desc(workflowExecutions.executedAt))
-        .limit(1);
+    const workflowsWithStats: WorkflowWithStats[] = workflowsWithStatsResult.map(row => ({
+      ...row.workflow,
+      executionCount: row.executionCount || 0,
+      lastExecutedAt: row.lastExecutedAt || null,
+    }));
 
-      workflowsWithStats.push({
-        ...workflow,
-        executionCount: await this.getExecutionCount(workflow.id),
-        lastExecutedAt: executions[0]?.executedAt || null,
-      });
-    }
-
-    return workflowsWithStats;
+    return {
+      workflows: workflowsWithStats,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    };
   }
 
   /**
-   * Get execution history for a workflow
+   * Get execution history for a workflow with cursor-based pagination
    */
-  async getExecutionHistory(workflowId: string): Promise<WorkflowExecution[]> {
-    return db
+  async getExecutionHistory(
+    workflowId: string,
+    cursor?: string,
+    limit: number = 50
+  ): Promise<CursorPaginatedExecutions> {
+    // Apply cursor if provided
+    let cursorExecutedAt: Date | null = null;
+    if (cursor) {
+      const cursorExecution = await this.getExecutionById(cursor);
+      if (cursorExecution) {
+        cursorExecutedAt = cursorExecution.executedAt;
+      }
+    }
+
+    // Build the query with proper WHERE clause
+    const results = await db
       .select()
       .from(workflowExecutions)
-      .where(eq(workflowExecutions.workflowId, workflowId))
-      .orderBy(desc(workflowExecutions.executedAt));
+      .where(
+        cursorExecutedAt
+          ? sql`${workflowExecutions.workflowId} = ${workflowId} AND ${workflowExecutions.executedAt} <= ${cursorExecutedAt.getTime()}`
+          : eq(workflowExecutions.workflowId, workflowId)
+      )
+      .orderBy(desc(workflowExecutions.executedAt))
+      .limit(limit + 1); // Fetch one extra to check for next page
+
+    // Check if there's more data
+    const hasMore = results.length > limit;
+    const executions = hasMore ? results.slice(0, -1) : results;
+
+    // Get the next cursor (last item's ID)
+    const nextCursor =
+      hasMore && executions.length > 0 ? executions[executions.length - 1].id : null;
+
+    return {
+      executions,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
+  /**
+   * Get a single execution by ID
+   */
+  async getExecutionById(id: string): Promise<WorkflowExecution | null> {
+    const results = await db
+      .select()
+      .from(workflowExecutions)
+      .where(eq(workflowExecutions.id, id))
+      .limit(1);
+    return results[0] || null;
   }
 
   /**
@@ -272,17 +363,6 @@ ${stepSummaries}`,
       error: data.error,
       executedAt: new Date(),
     });
-  }
-
-  /**
-   * Get execution count for a workflow
-   */
-  private async getExecutionCount(workflowId: string): Promise<number> {
-    const result = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(workflowExecutions)
-      .where(eq(workflowExecutions.workflowId, workflowId));
-    return result[0]?.count || 0;
   }
 
   /**

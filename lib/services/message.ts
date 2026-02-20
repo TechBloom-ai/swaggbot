@@ -1,8 +1,17 @@
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 
 import { db } from '@/lib/db';
 import { messages, Message, NewMessage } from '@/lib/db/schema';
 import { log } from '@/lib/logger';
+
+export interface CursorPaginatedMessages {
+  messages: Message[];
+  pagination: {
+    cursor: string | null;
+    hasMore: boolean;
+    limit: number;
+  };
+}
 
 export class MessageService {
   private static instance: MessageService;
@@ -17,22 +26,56 @@ export class MessageService {
   }
 
   /**
-   * Get recent messages for a session
+   * Get recent messages for a session with cursor-based pagination
    * @param sessionId - The session ID
-   * @param limit - Maximum number of messages to return (default: 10)
-   * @returns Array of messages ordered by creation time (oldest first)
+   * @param cursor - Optional cursor (message ID) to fetch messages before this point
+   * @param limit - Maximum number of messages to return (default: 50)
+   * @returns Paginated messages ordered by creation time (oldest first)
    */
-  async getRecentMessages(sessionId: string, limit: number = 10): Promise<Message[]> {
+  async getRecentMessages(
+    sessionId: string,
+    cursor?: string,
+    limit: number = 50
+  ): Promise<CursorPaginatedMessages> {
     try {
-      const result = await db
+      // Apply cursor if provided
+      let cursorCreatedAt: Date | null = null;
+      if (cursor) {
+        const cursorMessage = await this.getById(cursor);
+        if (cursorMessage) {
+          cursorCreatedAt = cursorMessage.createdAt;
+        }
+      }
+
+      // Fetch messages with pagination
+      const results = await db
         .select()
         .from(messages)
-        .where(eq(messages.sessionId, sessionId))
+        .where(
+          cursorCreatedAt
+            ? sql`${messages.sessionId} = ${sessionId} AND ${messages.createdAt} <= ${cursorCreatedAt.getTime()}`
+            : eq(messages.sessionId, sessionId)
+        )
         .orderBy(desc(messages.createdAt))
-        .limit(limit);
+        .limit(limit + 1); // Fetch one extra to check for next page
+
+      // Check if there's more data
+      const hasMore = results.length > limit;
+      const messageList = hasMore ? results.slice(0, -1) : results;
+
+      // Get the next cursor (last item's ID)
+      const nextCursor =
+        hasMore && messageList.length > 0 ? messageList[messageList.length - 1].id : null;
 
       // Return in chronological order (oldest first)
-      return result.reverse();
+      return {
+        messages: messageList.reverse(),
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       log.error('Failed to get recent messages', error, {
         sessionId,
@@ -106,19 +149,55 @@ export class MessageService {
   }
 
   /**
-   * Get messages by workflow ID
+   * Get messages by workflow ID with cursor-based pagination
    * @param workflowId - Workflow ID
-   * @returns Array of messages linked to the workflow
+   * @param cursor - Optional cursor (message ID) to fetch messages before this point
+   * @param limit - Maximum number of messages to return (default: 50)
+   * @returns Paginated messages linked to the workflow
    */
-  async getByWorkflowId(workflowId: string): Promise<Message[]> {
+  async getByWorkflowId(
+    workflowId: string,
+    cursor?: string,
+    limit: number = 50
+  ): Promise<CursorPaginatedMessages> {
     try {
-      const result = await db
+      // Apply cursor if provided
+      let cursorCreatedAt: Date | null = null;
+      if (cursor) {
+        const cursorMessage = await this.getById(cursor);
+        if (cursorMessage) {
+          cursorCreatedAt = cursorMessage.createdAt;
+        }
+      }
+
+      // Fetch messages with pagination
+      const results = await db
         .select()
         .from(messages)
-        .where(eq(messages.workflowId, workflowId))
-        .orderBy(desc(messages.createdAt));
+        .where(
+          cursorCreatedAt
+            ? sql`${messages.workflowId} = ${workflowId} AND ${messages.createdAt} <= ${cursorCreatedAt.getTime()}`
+            : eq(messages.workflowId, workflowId)
+        )
+        .orderBy(desc(messages.createdAt))
+        .limit(limit + 1); // Fetch one extra to check for next page
 
-      return result;
+      // Check if there's more data
+      const hasMore = results.length > limit;
+      const messageList = hasMore ? results.slice(0, -1) : results;
+
+      // Get the next cursor (last item's ID)
+      const nextCursor =
+        hasMore && messageList.length > 0 ? messageList[messageList.length - 1].id : null;
+
+      return {
+        messages: messageList,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       log.error('Failed to get messages by workflow ID', error, {
         workflowId,

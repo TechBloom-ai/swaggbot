@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc, count } from 'drizzle-orm';
 
 import { db } from '@/lib/db';
 import { sessions, NewSession, Session, messages } from '@/lib/db/schema';
@@ -96,6 +96,18 @@ export interface SessionStats {
   createdAt: Date;
 }
 
+export interface PaginatedSessions {
+  sessions: Session[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+}
+
 export class SessionService {
   async create(input: CreateSessionInput): Promise<Session> {
     // Validate URL security (defense-in-depth: also validated at API layer)
@@ -141,8 +153,33 @@ export class SessionService {
     return newSession as Session;
   }
 
-  async findAll(): Promise<Session[]> {
-    return db.select().from(sessions).orderBy(sessions.createdAt);
+  async findAll(page: number = 1, limit: number = 20): Promise<PaginatedSessions> {
+    const offset = (page - 1) * limit;
+
+    // Get total count
+    const totalResult = await db.select({ count: count() }).from(sessions);
+    const total = totalResult[0]?.count || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated sessions
+    const sessionsList = await db
+      .select()
+      .from(sessions)
+      .orderBy(desc(sessions.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      sessions: sessionsList,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    };
   }
 
   async findById(id: string): Promise<Session | null> {

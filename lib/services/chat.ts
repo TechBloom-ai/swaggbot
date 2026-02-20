@@ -41,8 +41,12 @@ export class ChatService {
     let history: LLMMessage[] = [];
     let _userMessageId: string | undefined;
     try {
-      const recentMessages = await messageService.getRecentMessages(input.sessionId, 10);
-      history = this.convertMessagesToLLMFormat(recentMessages);
+      const recentMessagesResult = await messageService.getRecentMessages(
+        input.sessionId,
+        undefined,
+        10
+      );
+      history = this.convertMessagesToLLMFormat(recentMessagesResult.messages);
 
       // Save user message
       const userMessage = await messageService.create({

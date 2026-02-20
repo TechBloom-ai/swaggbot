@@ -65,10 +65,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET /api/workflow?sessionId={id} - List all workflows for a session
+// GET /api/workflow?sessionId={id} - List all workflows for a session with pagination
 export async function GET(request: NextRequest) {
   try {
-    const sessionId = request.nextUrl.searchParams.get('sessionId');
+    const searchParams = request.nextUrl.searchParams;
+    const sessionId = searchParams.get('sessionId');
 
     if (!sessionId) {
       throw new ValidationError('Session ID is required', {
@@ -84,7 +85,19 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    log.info('Fetching workflows for session', { sessionId });
+    // Parse pagination params
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
+
+    // Validate pagination params
+    const validatedPage = Math.max(1, page);
+    const validatedLimit = Math.min(100, Math.max(1, limit));
+
+    log.info('Fetching workflows for session', {
+      sessionId,
+      page: validatedPage,
+      limit: validatedLimit,
+    });
 
     // Check if session exists
     const session = await sessionService.findById(sessionId);
@@ -92,11 +105,16 @@ export async function GET(request: NextRequest) {
       throw new NotFoundError('Session', sessionId);
     }
 
-    const workflows = await workflowService.findBySessionId(sessionId);
+    const result = await workflowService.findBySessionId(sessionId, validatedPage, validatedLimit);
 
-    log.info('Workflows fetched', { sessionId, count: workflows.length });
+    log.info('Workflows fetched', {
+      sessionId,
+      count: result.workflows.length,
+      total: result.pagination.total,
+      page: result.pagination.page,
+    });
 
-    return createSuccessResponse({ workflows });
+    return createSuccessResponse(result);
   } catch (error) {
     log.error('Failed to list workflows', error, { route: 'GET /api/workflow' });
     return handleApiError(error);
