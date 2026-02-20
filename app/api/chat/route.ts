@@ -11,10 +11,11 @@ const chatSchema = z.object({
   message: z.string().min(1, 'Message cannot be empty').max(2000, 'Message too long'),
 });
 
-// GET /api/chat - Get message history for a session
+// GET /api/chat - Get message history for a session with cursor-based pagination
 export async function GET(request: NextRequest) {
   try {
-    const sessionId = request.nextUrl.searchParams.get('sessionId');
+    const searchParams = request.nextUrl.searchParams;
+    const sessionId = searchParams.get('sessionId');
 
     if (!sessionId) {
       throw new ValidationError('Session ID is required', {
@@ -30,14 +31,27 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    log.info('Fetching message history', { sessionId });
+    // Parse pagination params
+    const cursor = searchParams.get('cursor') || undefined;
+    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const validatedLimit = Math.min(100, Math.max(1, limit));
 
-    // Get recent messages
-    const messages = await messageService.getRecentMessages(sessionId, 50);
+    log.info('Fetching message history', {
+      sessionId,
+      cursor: cursor || 'none',
+      limit: validatedLimit,
+    });
 
-    log.info('Message history fetched', { sessionId, count: messages.length });
+    // Get recent messages with pagination
+    const result = await messageService.getRecentMessages(sessionId, cursor, validatedLimit);
 
-    return createSuccessResponse({ messages });
+    log.info('Message history fetched', {
+      sessionId,
+      count: result.messages.length,
+      hasMore: result.pagination.hasMore,
+    });
+
+    return createSuccessResponse(result);
   } catch (error) {
     log.error('Failed to get message history', error, { route: 'GET /api/chat' });
     return handleApiError(error);
@@ -72,7 +86,19 @@ export async function POST(request: NextRequest) {
 
     log.info('Processing chat message', { sessionId, messageLength: message.length });
 
-    // Process message
+    // Try streaming first (for workflows)
+    const streamResult = await chatService.processMessageStreaming({ sessionId, message });
+    if (streamResult) {
+      return new Response(streamResult.stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      });
+    }
+
+    // Non-streaming fallback for regular responses
     const response = await chatService.processMessage({ sessionId, message });
 
     log.info('Chat message processed', {

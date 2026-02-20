@@ -68,11 +68,22 @@ export interface SelfAwarenessResult {
   response: string;
 }
 
+// Workflow execution result
+export interface WorkflowExecutionResult {
+  type: 'workflow_result';
+  message: string;
+  curl: string;
+  shouldExecute: boolean;
+  executed: boolean;
+  result?: unknown;
+}
+
 // Union type for all chat response types
 export type ChatResponse =
   | CurlGenerationResult
   | ApiInfoResult
   | SelfAwarenessResult
+  | WorkflowExecutionResult
   | {
       type: 'error';
       message: string;
@@ -108,11 +119,31 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   metadata?: {
-    type?: 'curl' | 'api_info' | 'error';
+    type?: 'curl' | 'api_info' | 'error' | 'workflow_result';
     curl?: string;
     executed?: boolean;
     result?: unknown;
+    // Workflow streaming progress
+    workflowProgress?: WorkflowProgressState;
   };
+}
+
+// Workflow step progress for real-time UI updates
+export interface WorkflowStepProgress {
+  step: number;
+  description: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  result?: unknown;
+  error?: string;
+  httpCode?: number;
+}
+
+// Overall workflow progress state
+export interface WorkflowProgressState {
+  phase: 'planning' | 'executing' | 'completed' | 'error';
+  totalSteps: number;
+  steps: WorkflowStepProgress[];
+  error?: string;
 }
 
 // Swagger/OpenAPI document type (simplified)

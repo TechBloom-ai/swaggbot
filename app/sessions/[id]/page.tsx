@@ -14,13 +14,15 @@ import {
   X,
   Eye,
   EyeOff,
-  ExternalLink,
   Copy,
   CheckCircle,
+  RefreshCw,
+  Eraser,
 } from 'lucide-react';
 
 import { toast } from '@/stores/toastStore';
-import { Spinner } from '@/components/ui';
+import { useChatStore } from '@/stores/chatStore';
+import { Spinner, ConfirmModal } from '@/components/ui';
 
 interface Session {
   id: string;
@@ -58,6 +60,10 @@ export default function SessionDetailPage() {
   const [swaggerDoc, setSwaggerDoc] = useState<Record<string, unknown> | null>(null);
   const [showSwagger, setShowSwagger] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [showDeleteTokenModal, setShowDeleteTokenModal] = useState(false);
+  const [showDeleteSessionModal, setShowDeleteSessionModal] = useState(false);
 
   useEffect(() => {
     fetchSession();
@@ -166,10 +172,10 @@ export default function SessionDetailPage() {
   };
 
   const handleDeleteToken = async () => {
-    if (!confirm('Are you sure you want to remove the authentication token?')) {
-      return;
-    }
+    setShowDeleteTokenModal(true);
+  };
 
+  const confirmDeleteToken = async () => {
     try {
       const response = await fetch(`/api/session/${sessionId}`, {
         method: 'PATCH',
@@ -182,6 +188,7 @@ export default function SessionDetailPage() {
         const updatedSession = result.data?.session || result.session;
         setSession(updatedSession);
         toast.success('Token removed', 'Authentication token has been deleted');
+        setShowDeleteTokenModal(false);
       } else {
         toast.error('Failed to remove token', 'Please try again');
       }
@@ -192,16 +199,17 @@ export default function SessionDetailPage() {
   };
 
   const handleDeleteSession = async () => {
-    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-      return;
-    }
+    setShowDeleteSessionModal(true);
+  };
 
+  const confirmDeleteSession = async () => {
     try {
       const response = await fetch(`/api/session/${sessionId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
+        setShowDeleteSessionModal(false);
         toast.success('Session deleted', 'Redirecting to home...');
         router.push('/');
       } else {
@@ -217,6 +225,80 @@ export default function SessionDetailPage() {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRefreshSwagger = async () => {
+    if (!session?.swaggerUrl) {
+      toast.error('No Swagger URL', 'This session does not have a Swagger URL configured');
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      const response = await fetch(`/api/session/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ swaggerUrl: session.swaggerUrl }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const updatedSession = result.data?.session || result.session;
+        setSession(updatedSession);
+
+        // Re-parse the swagger doc
+        if (updatedSession.swaggerDoc) {
+          try {
+            const parsed = JSON.parse(updatedSession.swaggerDoc);
+            setSwaggerDoc(parsed);
+          } catch {
+            console.error('Failed to parse swagger doc');
+          }
+        }
+
+        toast.success('Swagger refreshed', 'API documentation has been updated');
+      } else {
+        const error = await response.json();
+        toast.error('Failed to refresh Swagger', error.error?.message || 'Please try again');
+      }
+    } catch (error) {
+      console.error('Failed to refresh swagger:', error);
+      toast.error('Failed to refresh Swagger', 'Please check your connection');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleClearChat = async () => {
+    setIsCleaning(true);
+    try {
+      const response = await fetch(`/api/session/${sessionId}/clear-chat`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const deletedCount = result.data?.deletedCount || 0;
+        toast.success(
+          'Chat cleared',
+          deletedCount > 0
+            ? `${deletedCount} message${deletedCount === 1 ? '' : 's'} deleted`
+            : 'All messages have been deleted'
+        );
+        // Clear messages from store so they don't reappear in chat
+        useChatStore.getState().clearSession(sessionId);
+        // Refresh stats to update message count
+        fetchStats();
+      } else {
+        const error = await response.json();
+        toast.error('Failed to clear chat', error.error?.message || 'Please try again');
+      }
+    } catch (error) {
+      console.error('Failed to clear chat:', error);
+      toast.error('Failed to clear chat', 'Please check your connection');
+    } finally {
+      setIsCleaning(false);
+    }
   };
 
   if (isLoading) {
@@ -307,13 +389,37 @@ export default function SessionDetailPage() {
               <h2 className='text-xs sm:text-sm font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]'>
                 Actions
               </h2>
-              <div className='mt-2 sm:mt-4 grid grid-cols-2 sm:grid-cols-1 gap-2 sm:gap-3'>
+              <div className='mt-2 sm:mt-4 flex flex-col gap-2 sm:gap-3'>
                 <button
                   onClick={() => router.push(`/sessions/${sessionId}/chat`)}
                   className='flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-circuit-green)] px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-white transition-colors hover:bg-[var(--color-circuit-green-dark)]'
                 >
                   <MessageSquare className='h-4 w-4' />
                   <span className='whitespace-nowrap'>Open Chat</span>
+                </button>
+                <button
+                  onClick={handleRefreshSwagger}
+                  disabled={isRefreshing}
+                  className='flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white disabled:opacity-50'
+                >
+                  {isRefreshing ? (
+                    <Spinner className='h-4 w-4' />
+                  ) : (
+                    <RefreshCw className='h-4 w-4' />
+                  )}
+                  <span className='whitespace-nowrap'>
+                    {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                  </span>
+                </button>
+                <button
+                  onClick={handleClearChat}
+                  disabled={isCleaning}
+                  className='flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50'
+                >
+                  {isCleaning ? <Spinner className='h-4 w-4' /> : <Eraser className='h-4 w-4' />}
+                  <span className='whitespace-nowrap'>
+                    {isCleaning ? 'Clearing...' : 'Clean Chat'}
+                  </span>
                 </button>
                 <button
                   onClick={handleDeleteSession}
@@ -434,27 +540,29 @@ export default function SessionDetailPage() {
                   </p>
                 )}
 
-                <div className='mt-3 sm:mt-4 space-y-1.5 sm:space-y-2'>
-                  <label className='text-xs sm:text-sm font-medium text-[var(--color-logic-navy)]'>
-                    {session.authToken ? 'Update Token' : 'Set Token'}
-                  </label>
-                  <div className='flex flex-col sm:flex-row gap-2'>
-                    <input
-                      type='text'
-                      value={newToken}
-                      onChange={e => setNewToken(e.target.value)}
-                      placeholder='Enter Bearer token...'
-                      className='flex-1 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-[var(--color-circuit-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-circuit-green)]'
-                    />
-                    <button
-                      onClick={handleUpdateToken}
-                      disabled={isUpdatingToken || !newToken.trim()}
-                      className='rounded-lg bg-[var(--color-circuit-green)] px-4 py-2 text-sm text-white transition-colors hover:bg-[var(--color-circuit-green-dark)] disabled:opacity-50 whitespace-nowrap'
-                    >
-                      {isUpdatingToken ? <Spinner className='h-4 w-4' /> : 'Save'}
-                    </button>
+                {!session.authToken && (
+                  <div className='mt-3 sm:mt-4 space-y-1.5 sm:space-y-2'>
+                    <label className='text-xs sm:text-sm font-medium text-[var(--color-logic-navy)]'>
+                      Set Token
+                    </label>
+                    <div className='flex flex-col sm:flex-row gap-2'>
+                      <input
+                        type='text'
+                        value={newToken}
+                        onChange={e => setNewToken(e.target.value)}
+                        placeholder='Enter Bearer token...'
+                        className='flex-1 text-logic-navy rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-[var(--color-circuit-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-circuit-green)]'
+                      />
+                      <button
+                        onClick={handleUpdateToken}
+                        disabled={isUpdatingToken || !newToken.trim()}
+                        className='rounded-lg bg-[var(--color-circuit-green)] px-4 py-2 text-sm text-white transition-colors hover:bg-[var(--color-circuit-green-dark)] disabled:opacity-50 whitespace-nowrap'
+                      >
+                        {isUpdatingToken ? <Spinner className='h-4 w-4' /> : 'Save'}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -472,15 +580,6 @@ export default function SessionDetailPage() {
                   >
                     {showSwagger ? 'Hide' : 'View'}
                   </button>
-                  <a
-                    href={session.swaggerUrl}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'
-                  >
-                    <ExternalLink className='h-3 w-3' />
-                    Open
-                  </a>
                 </div>
               </div>
 
@@ -575,7 +674,7 @@ export default function SessionDetailPage() {
                                       <td className='px-2 sm:px-3 py-1.5 sm:py-2 font-mono text-xs text-[var(--color-logic-navy)] truncate max-w-[150px] sm:max-w-none'>
                                         {path}
                                       </td>
-                                      <td className='px-2 sm:px-3 py-1.5 sm:py-2 text-[var(--color-text-secondary)] truncate max-w-[100px] sm:max-w-none'>
+                                      <td className='px-2 sm:px-3 py-1.5 sm:py-2 text-[var(--color-text-secondary)] max-w-[100px] sm:max-w-none'>
                                         {details.summary || '-'}
                                       </td>
                                     </tr>
@@ -594,6 +693,28 @@ export default function SessionDetailPage() {
           </div>
         </div>
       </main>
+
+      {/* Delete Token Modal */}
+      <ConfirmModal
+        isOpen={showDeleteTokenModal}
+        onClose={() => setShowDeleteTokenModal(false)}
+        onConfirm={confirmDeleteToken}
+        title='Remove Authentication Token'
+        message='Are you sure you want to remove the authentication token?'
+        confirmLabel='Remove'
+        variant='danger'
+      />
+
+      {/* Delete Session Modal */}
+      <ConfirmModal
+        isOpen={showDeleteSessionModal}
+        onClose={() => setShowDeleteSessionModal(false)}
+        onConfirm={confirmDeleteSession}
+        title='Delete Session'
+        message='Are you sure you want to delete this session? This action cannot be undone.'
+        confirmLabel='Delete'
+        variant='danger'
+      />
     </div>
   );
 }

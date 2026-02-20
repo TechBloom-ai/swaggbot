@@ -129,7 +129,7 @@ API Documentation:
 {{swaggerDoc}}
 
 Authentication:
-{{authToken}}
+{{authStatus}}
 
 Rules:
 1. **CRITICAL - Base URL: Use the EXACT Base URL shown in the API documentation below. This URL has been pre-configured to work with the Swaggbot backend environment (e.g., Docker networking with IP addresses). DO NOT use localhost, 127.0.0.1, or any URL other than what's explicitly shown as "Base URL" in the documentation.**
@@ -137,12 +137,13 @@ Rules:
 3. Include ALL required parameters - NEVER use placeholders like "string", "value", "id", "<value>", "PLACEHOLDER", "example", etc.
 4. Use correct HTTP method
 5. Format as single-line curl command
-6. Include proper headers (Content-Type, Authorization if token provided)
+6. Include proper headers (Content-Type, etc.)
 
-When authentication token is provided:
-- Add Authorization header: -H 'Authorization: Bearer <token>'
-- Do not ask the user for credentials if a valid token is already provided
-- Use the token for all authenticated requests
+IMPORTANT - DO NOT INCLUDE AUTHORIZATION HEADER:
+- If authentication is available, the backend will automatically add the Authorization header
+- DO NOT include -H 'Authorization: ...' in the curl command you generate
+- The system handles authentication separately for security reasons
+- If the endpoint requires authentication and no token is available, mention this to the user
 6. Escape special characters properly
 7. For request bodies, use compact JSON without newlines
 
@@ -360,41 +361,98 @@ Guidelines for workflow planning:
 
 **Advanced - Array Filtering and Search:**
 
-When you need to find a specific item in an array response (e.g., "find collaborator named Mauricio Henrique"):
+When you need to find a specific item in an array response:
 
-Use the bracket filter syntax: `[field=value].path`
+**1. Filter by Field Value (for finding by name, email, etc.):**
+Use syntax: `[field=value].path`
 
 Examples:
-- `[name=Mauricio Henrique].id` - Find item where name="Mauricio Henrique", return the id field
-- `[email=john@test.com].phone` - Find item where email="john@test.com", return the phone field
+- `[name=Mauricio Henrique].id` - Find item where name="Mauricio Henrique", return the id
+- `[email=john@test.com].phone` - Find item where email="john@test.com", return the phone
 - `[status=active].id` - Find first active item, return its id
+- `[name=Felipe Rocha].id` - Find Felipe Rocha by name
 
-**How it works:**
+**Natural Language Patterns → Filter Syntax:**
+| User Says | extractFields Value |
+|-----------|-------------------|
+| "get the Felipe Rocha collaborator" | `[name=Felipe Rocha].id` |
+| "find the user named John" | `[name=John].id` |
+| "get by email test@example.com" | `[email=test@example.com].id` |
+| "take the id of Mauricio Henrique" | `[name=Mauricio Henrique].id` |
+| "get the active user" | `[status=active].id` |
+
+**2. Array Index Access (for "first", "second", etc.):**
+Use syntax: `[index].path` or just `index.path`
+
+Examples:
+- `[0].id` or `0.id` - Get the FIRST item's id
+- `[1].id` or `1.id` - Get the SECOND item's id  
+- `[2].id` - Get the THIRD item's id
+- `0.name` - Get the first item's name
+
+**Natural Language Patterns → Index Syntax:**
+| User Says | extractFields Value |
+|-----------|-------------------|
+| "get the first user" | `[0].id` |
+| "get the second collaborator" | `[1].id` |
+| "take the third item" | `[2].id` |
+| "get the last one" | (use filter by unique field instead) |
+
+**IMPORTANT - Consistency Rule:**
+If you use `[name=Felipe Rocha].id` in extractFields, you MUST use `{{[name=Felipe Rocha].id}}` in the subsequent step's endpoint.
+If you use `1.id` in extractFields, you MUST use `{{1.id}}` in the subsequent step's endpoint.
+The placeholder in the endpoint must EXACTLY match the extractFields value.
+
+**How filtering works:**
 1. The system searches through the array for items matching the filter criteria
-2. Matching is case-insensitive ("mauricio" matches "Mauricio")
+2. Matching is case-insensitive ("felipe" matches "Felipe")
 3. If ONE match found: returns the extracted value directly
 4. If MULTIPLE matches found: returns an array of values
 5. If NO match found: extraction fails
 
-**Usage in extractFields:**
+**Complete Example - Finding by Name:**
+User: "Get all collaborators and get Felipe Rocha's details"
 ```json
 {
-  "stepNumber": 1,
-  "description": "Find collaborator Mauricio Henrique",
-  "action": { "endpoint": "/collaborators", "method": "GET" },
-  "extractFields": ["[name=Mauricio Henrique].id"]
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators to find Felipe Rocha",
+      "action": { "endpoint": "/collaborators", "method": "GET" },
+      "extractFields": ["[name=Felipe Rocha].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get Felipe Rocha's details using his ID",
+      "action": {
+        "endpoint": "/collaborator/{{[name=Felipe Rocha].id}}",
+        "method": "GET"
+      }
+    }
+  ]
 }
 ```
 
-**Usage in subsequent steps:**
+**Complete Example - Getting by Index:**
+User: "Get all collaborators and get the second one's details"
 ```json
 {
-  "stepNumber": 2,
-  "description": "Get details for found collaborator",
-  "action": {
-    "endpoint": "/collaborator/{{[name=Mauricio Henrique].id}}",
-    "method": "GET"
-  }
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators",
+      "action": { "endpoint": "/collaborators", "method": "GET" },
+      "extractFields": ["[1].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get the second collaborator's details",
+      "action": {
+        "endpoint": "/collaborator/{{[1].id}}",
+        "method": "GET"
+      }
+    }
+  ]
 }
 ```
 
@@ -459,13 +517,85 @@ CORRECT:
 }
 ```
 
+**CRITICAL - Using Semantic Field Names for Multiple Dependencies:**
+
+When a workflow has MULTIPLE dependency fetching steps (e.g., fetching roles, payment_methods, employment_relationships, etc.), you MUST use **semantic field names** in extractFields instead of generic `[0].id`.
+
+**WRONG - All steps use [0].id (they overwrite each other!):**
+```json
+{
+  "steps": [
+    { "stepNumber": 1, "extractFields": ["[0].id"], ... },
+    { "stepNumber": 2, "extractFields": ["[0].id"], ... },
+    { "stepNumber": 3, "extractFields": ["[0].id"], ... }
+  ]
+}
+```
+
+**CORRECT - Use semantic field names:**
+```json
+{
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Fetch professional areas to get ID",
+      "action": { "endpoint": "/professional-areas", "method": "GET", "purpose": "Get professional_area_id" },
+      "extractFields": ["professional_area_id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Fetch employment relationships to get ID",
+      "action": { "endpoint": "/employment-relationships", "method": "GET", "purpose": "Get employment_relationship_id" },
+      "extractFields": ["employment_relationship_id"]
+    },
+    {
+      "stepNumber": 3,
+      "description": "Fetch roles to get ID",
+      "action": { "endpoint": "/roles", "method": "GET", "purpose": "Get role_id" },
+      "extractFields": ["role_id"]
+    },
+    {
+      "stepNumber": 4,
+      "description": "Fetch payment methods to get ID",
+      "action": { "endpoint": "/payment-methods", "method": "GET", "purpose": "Get payment_method_id" },
+      "extractFields": ["payment_method_id"]
+    },
+    {
+      "stepNumber": 5,
+      "description": "Create collaborator with extracted IDs",
+      "action": {
+        "endpoint": "/collaborator",
+        "method": "POST",
+        "purpose": "Create collaborator",
+        "body": {
+          "name": "Felipe Rocha",
+          "professional_area_id": "{{professional_area_id}}",
+          "employment_relationship_id": "{{employment_relationship_id}}",
+          "role_id": "{{role_id}}",
+          "payment_method_id": "{{payment_method_id}}"
+        }
+      }
+    }
+  ]
+}
+```
+
+**RULE:** The placeholder in the body (`{{field_name}}`) MUST match the extractFields value exactly.
+
+**Mapping Guidelines:**
+- If endpoint is `/professional-areas` → use `professional_area_id` (singular form, append `_id`)
+- If endpoint is `/roles` → use `role_id`
+- If endpoint is `/payment-methods` → use `payment_method_id`
+- If endpoint is `/employment-relationships` → use `employment_relationship_id`
+- If endpoint is `/type-services` → use `type_service_id`
+
 **Example - Creating with Mock Data and Dependencies:**
 User: "Create a collaborator named Felipe Rocha, mock the rest"
 Steps needed:
-1. GET /payment_methods - extract first payment method ID
-2. GET /roles - extract first role ID
-3. GET /employment_relationships - extract first relationship ID
-4. GET /professional_areas - extract first area ID
+1. GET /professional-areas - extractFields: `["professional_area_id"]`
+2. GET /employment-relationships - extractFields: `["employment_relationship_id"]`
+3. GET /roles - extractFields: `["role_id"]`
+4. GET /payment-methods - extractFields: `["payment_method_id"]`
 5. POST /collaborator with real extracted IDs + mock data for other fields
 
 **Example - Creating Patient with Foreign Key:**
@@ -573,6 +703,66 @@ Response:
         "endpoint": "/collaborator/{{[name=Mauricio Henrique].id}}",
         "method": "GET",
         "purpose": "Get detailed collaborator data using the found ID"
+      }
+    }
+  ],
+  "estimatedTotalSteps": 2
+}
+
+**Example - Finding by Name with Different Patterns:**
+User: "Get all collaborators and get the Felipe Rocha collaborator and get by id"
+Response:
+{
+  "workflowName": "Find Collaborator by Name",
+  "description": "Retrieves all collaborators, finds Felipe Rocha, and fetches his details by ID",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators to find Felipe Rocha",
+      "action": {
+        "endpoint": "/collaborators",
+        "method": "GET",
+        "purpose": "Fetch all collaborators to search for Felipe Rocha"
+      },
+      "extractFields": ["[name=Felipe Rocha].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get Felipe Rocha's details using the extracted ID",
+      "action": {
+        "endpoint": "/collaborator/{{[name=Felipe Rocha].id}}",
+        "method": "GET",
+        "purpose": "Retrieve detailed information for Felipe Rocha"
+      }
+    }
+  ],
+  "estimatedTotalSteps": 2
+}
+
+**Example - Getting by Array Index (Second Item):**
+User: "Get all collaborators and get the second collaborator and get by id"
+Response:
+{
+  "workflowName": "Get Second Collaborator",
+  "description": "Retrieves all collaborators and gets the second one's details",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Get all collaborators",
+      "action": {
+        "endpoint": "/collaborators",
+        "method": "GET",
+        "purpose": "Fetch all collaborators"
+      },
+      "extractFields": ["[1].id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Get the second collaborator's details",
+      "action": {
+        "endpoint": "/collaborator/{{[1].id}}",
+        "method": "GET",
+        "purpose": "Retrieve details of the second collaborator"
       }
     }
   ],

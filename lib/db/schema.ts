@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
 // Sessions table - stores session configuration and metadata
@@ -15,36 +15,52 @@ export const sessions = sqliteTable('sessions', {
 });
 
 // Workflows table - stores workflow plans
-export const workflows = sqliteTable('workflows', {
-  id: text('id').primaryKey(),
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  description: text('description').notNull(),
-  steps: text('steps').notNull(), // JSON array of workflow steps
-  status: text('status', { enum: ['pending', 'running', 'completed', 'failed'] })
-    .notNull()
-    .default('pending'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-  completedAt: integer('completed_at', { mode: 'timestamp' }),
-});
+export const workflows = sqliteTable(
+  'workflows',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    steps: text('steps').notNull(), // JSON array of workflow steps
+    status: text('status', { enum: ['pending', 'running', 'completed', 'failed'] })
+      .notNull()
+      .default('pending'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+    completedAt: integer('completed_at', { mode: 'timestamp' }),
+  },
+  table => ({
+    sessionIdIdx: index('idx_workflows_session_id').on(table.sessionId),
+    statusCompletedAtIdx: index('idx_workflows_status_completed_at').on(
+      table.status,
+      table.completedAt
+    ),
+  })
+);
 
 // Workflow executions table - stores execution results for debugging
-export const workflowExecutions = sqliteTable('workflow_executions', {
-  id: text('id').primaryKey(),
-  workflowId: text('workflow_id')
-    .notNull()
-    .references(() => workflows.id, { onDelete: 'cascade' }),
-  stepNumber: integer('step_number').notNull(),
-  status: text('status', { enum: ['completed', 'failed'] }).notNull(),
-  request: text('request').notNull(), // JSON: curl command, headers, body
-  response: text('response'), // JSON: response data (may be truncated if large)
-  extracted: text('extracted'), // JSON: extracted values from response
-  error: text('error'), // Error message if failed
-  executedAt: integer('executed_at', { mode: 'timestamp' }).notNull(),
-});
+export const workflowExecutions = sqliteTable(
+  'workflow_executions',
+  {
+    id: text('id').primaryKey(),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflows.id, { onDelete: 'cascade' }),
+    stepNumber: integer('step_number').notNull(),
+    status: text('status', { enum: ['completed', 'failed'] }).notNull(),
+    request: text('request').notNull(), // JSON: curl command, headers, body
+    response: text('response'), // JSON: response data (may be truncated if large)
+    extracted: text('extracted'), // JSON: extracted values from response
+    error: text('error'), // Error message if failed
+    executedAt: integer('executed_at', { mode: 'timestamp' }).notNull(),
+  },
+  table => ({
+    workflowIdIdx: index('idx_workflow_executions_workflow_id').on(table.workflowId),
+  })
+);
 
 // Settings table - key-value store for application settings
 export const settings = sqliteTable('settings', {
@@ -54,17 +70,30 @@ export const settings = sqliteTable('settings', {
 });
 
 // Messages table - stores chat conversation history
-export const messages = sqliteTable('messages', {
-  id: text('id').primaryKey(),
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  role: text('role', { enum: ['user', 'assistant'] }).notNull(),
-  content: text('content').notNull(),
-  workflowId: text('workflow_id').references(() => workflows.id, { onDelete: 'set null' }),
-  metadata: text('metadata'), // JSON: type, curl, executed, result, workflowId, etc.
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-});
+export const messages = sqliteTable(
+  'messages',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+    content: text('content').notNull(),
+    workflowId: text('workflow_id').references(() => workflows.id, {
+      onDelete: 'set null',
+    }),
+    metadata: text('metadata'), // JSON: type, curl, executed, result, workflowId, etc.
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  },
+  table => ({
+    sessionIdIdx: index('idx_messages_session_id').on(table.sessionId),
+    workflowIdIdx: index('idx_messages_workflow_id').on(table.workflowId),
+    sessionCreatedAtIdx: index('idx_messages_session_id_created_at').on(
+      table.sessionId,
+      table.createdAt
+    ),
+  })
+);
 
 // Define relations
 export const sessionsRelations = relations(sessions, ({ many }) => ({

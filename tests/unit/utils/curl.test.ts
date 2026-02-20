@@ -54,6 +54,72 @@ describe('Curl Utilities', () => {
       const result = validateCurlCommand('   ');
       expect(result.valid).toBe(false);
     });
+
+    it('should reject commands with shell metacharacters ;', () => {
+      const result = validateCurlCommand('curl http://api.com; rm -rf /');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should reject commands with shell metacharacters &&', () => {
+      const result = validateCurlCommand('curl http://api.com && rm -rf /');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should reject commands with shell metacharacters ||', () => {
+      const result = validateCurlCommand('curl http://api.com || rm -rf /');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should reject commands with shell metacharacters `', () => {
+      const result = validateCurlCommand('curl http://api.com`whoami`');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should reject commands with shell metacharacters $()', () => {
+      const result = validateCurlCommand('curl http://api.com$(rm -rf /)');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should reject commands with shell metacharacters |', () => {
+      const result = validateCurlCommand('curl http://api.com | cat /etc/passwd');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should reject commands with backticks', () => {
+      const result = validateCurlCommand('curl `echo malicious` http://api.com');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should reject commands with $variable expansion', () => {
+      const result = validateCurlCommand('curl http://api.com/$HOME');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('shell metacharacters');
+    });
+
+    it('should allow URLs with query parameters containing special characters', () => {
+      // Query parameters should be URL-encoded, not shell characters
+      const result = validateCurlCommand('curl "http://api.com?param=value%26other"');
+      expect(result.valid).toBe(true);
+    });
+
+    it('should allow valid curl commands with headers', () => {
+      const result = validateCurlCommand('curl -H "Authorization: Bearer token" http://api.com');
+      expect(result.valid).toBe(true);
+    });
+
+    it('should allow valid curl commands with JSON data', () => {
+      const result = validateCurlCommand(
+        'curl -X POST -H "Content-Type: application/json" -d \'{"key":"value"}\' http://api.com'
+      );
+      expect(result.valid).toBe(true);
+    });
   });
 
   describe('extractTokenFromResponse', () => {

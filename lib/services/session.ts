@@ -1,9 +1,18 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc, count } from 'drizzle-orm';
 
 import { db } from '@/lib/db';
 import { sessions, NewSession, Session, messages } from '@/lib/db/schema';
 import { SwaggerDoc } from '@/lib/types';
 import { parseSwagger, extractBaseUrl, formatSwaggerForLLM } from '@/lib/utils/swagger';
+import { validateSwaggerUrlFull } from '@/lib/utils/url-validator';
+import {
+  encrypt,
+  decrypt,
+  serializeEncrypted,
+  deserializeEncrypted,
+  isEncrypted,
+} from '@/lib/utils/encryption';
+import { log } from '@/lib/logger';
 
 /**
  * Extract the origin (protocol + host) from a URL
@@ -87,8 +96,26 @@ export interface SessionStats {
   createdAt: Date;
 }
 
+export interface PaginatedSessions {
+  sessions: Session[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+}
+
 export class SessionService {
   async create(input: CreateSessionInput): Promise<Session> {
+    // Validate URL security (defense-in-depth: also validated at API layer)
+    const urlValidation = validateSwaggerUrlFull(input.swaggerUrl);
+    if (!urlValidation.valid) {
+      throw new Error(`Invalid Swagger URL: ${urlValidation.error}`);
+    }
+
     // Fetch Swagger document from URL (rewrite localhost when inside Docker)
     const fetchUrl = rewriteLocalhostForDocker(input.swaggerUrl);
     const response = await fetch(fetchUrl);
@@ -126,22 +153,71 @@ export class SessionService {
     return newSession as Session;
   }
 
-  async findAll(): Promise<Session[]> {
-    return db.select().from(sessions).orderBy(sessions.createdAt);
+  async findAll(page: number = 1, limit: number = 20): Promise<PaginatedSessions> {
+    const offset = (page - 1) * limit;
+
+    // Get total count
+    const totalResult = await db.select({ count: count() }).from(sessions);
+    const total = totalResult[0]?.count || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated sessions
+    const sessionsList = await db
+      .select()
+      .from(sessions)
+      .orderBy(desc(sessions.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      sessions: sessionsList,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    };
   }
 
   async findById(id: string): Promise<Session | null> {
     const results = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
-    return results[0] || null;
+    const session = results[0];
+
+    if (!session) {
+      return null;
+    }
+
+    // Decrypt authToken if it exists and is encrypted
+    if (session.authToken && isEncrypted(session.authToken)) {
+      try {
+        const encryptedData = deserializeEncrypted(session.authToken);
+        session.authToken = decrypt(encryptedData);
+      } catch (error) {
+        // If decryption fails, log error but don't expose token
+        log.error(
+          'Failed to decrypt authToken',
+          error instanceof Error ? error : new Error(String(error))
+        );
+        session.authToken = null;
+      }
+    }
+
+    return session;
   }
 
   async updateAuthToken(id: string, authToken: string | null): Promise<Session> {
     const now = new Date();
 
+    // Encrypt authToken if provided
+    const encryptedToken = authToken ? serializeEncrypted(encrypt(authToken)) : null;
+
     await db
       .update(sessions)
       .set({
-        authToken,
+        authToken: encryptedToken,
         updatedAt: now,
         lastAccessedAt: now,
       })
@@ -193,7 +269,8 @@ export class SessionService {
     }
 
     if (input.authToken !== undefined) {
-      updateData.authToken = input.authToken;
+      // Encrypt authToken if provided
+      updateData.authToken = input.authToken ? serializeEncrypted(encrypt(input.authToken)) : null;
     }
 
     await db.update(sessions).set(updateData).where(eq(sessions.id, id));

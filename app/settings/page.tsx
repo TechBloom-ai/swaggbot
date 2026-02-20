@@ -14,10 +14,13 @@ import {
   MessageSquare,
   CheckCircle,
   AlertTriangle,
+  Brain,
+  Cpu,
 } from 'lucide-react';
 
 import { toast } from '@/stores/toastStore';
-import { Spinner } from '@/components/ui';
+import { Spinner, ConfirmModal } from '@/components/ui';
+import { LogoutButton } from '@/components/auth';
 
 interface AppInfo {
   name: string;
@@ -34,8 +37,16 @@ interface DatabaseStats {
   sizeFormatted: string;
 }
 
+interface LLMInfo {
+  provider: string;
+  label: string;
+  model: string;
+  status: string;
+}
+
 interface SettingsData {
   appInfo: AppInfo;
+  llm: LLMInfo;
   database: DatabaseStats;
 }
 
@@ -48,6 +59,7 @@ export default function SettingsPage() {
     success: boolean;
     deleted?: { sessions?: number; workflows?: number; messages?: number };
   } | null>(null);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -72,17 +84,10 @@ export default function SettingsPage() {
   };
 
   const handleCleanup = async () => {
-    if (
-      !confirm(
-        'Are you sure you want to run database cleanup? This will delete:\n\n' +
-          '- All sessions\n' +
-          '- All Completed/failed workflows\n\n' +
-          'This action cannot be undone.'
-      )
-    ) {
-      return;
-    }
+    setShowCleanupModal(true);
+  };
 
+  const confirmCleanup = async () => {
     setIsCleaning(true);
     setCleanupResult(null);
 
@@ -98,6 +103,7 @@ export default function SettingsPage() {
 
       if (data.success) {
         setCleanupResult({ success: true, deleted: data.deleted });
+        setShowCleanupModal(false);
         toast.success(
           'Cleanup completed',
           `Deleted ${data.deleted.sessions || 0} sessions, ${data.deleted.workflows || 0} workflows`
@@ -130,19 +136,22 @@ export default function SettingsPage() {
       {/* Header */}
       <header className='border-b border-[var(--color-border)] bg-white'>
         <div className='mx-auto max-w-5xl px-3 py-3 sm:px-4 sm:py-4 lg:px-8'>
-          <div className='flex items-center gap-2 sm:gap-4'>
-            <button
-              onClick={() => router.push('/')}
-              className='rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-alt)]'
-            >
-              <ArrowLeft className='h-4 w-4 sm:h-5 sm:w-5' />
-            </button>
-            <div className='flex items-center gap-2'>
-              <Settings className='h-5 w-5 text-[var(--color-circuit-green)]' />
-              <h1 className='text-lg font-semibold text-[var(--color-logic-navy)] sm:text-xl'>
-                Settings
-              </h1>
+          <div className='flex items-center justify-between gap-2 sm:gap-4'>
+            <div className='flex items-center gap-2 sm:gap-4'>
+              <button
+                onClick={() => router.push('/')}
+                className='rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-alt)]'
+              >
+                <ArrowLeft className='h-4 w-4 sm:h-5 sm:w-5' />
+              </button>
+              <div className='flex items-center gap-2'>
+                <Settings className='h-5 w-5 text-[var(--color-circuit-green)]' />
+                <h1 className='text-lg font-semibold text-[var(--color-logic-navy)] sm:text-xl'>
+                  Settings
+                </h1>
+              </div>
             </div>
+            <LogoutButton />
           </div>
         </div>
       </header>
@@ -180,6 +189,46 @@ export default function SettingsPage() {
                 <span className='text-sm text-[var(--color-text-secondary)]'>Node.js</span>
                 <span className='font-mono text-xs text-[var(--color-text-secondary)] sm:text-sm'>
                   {settings?.appInfo.nodeVersion}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* LLM Provider */}
+          <div className='rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-6'>
+            <h2 className='flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)] sm:text-sm'>
+              <Brain className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
+              LLM Provider
+            </h2>
+
+            <div className='mt-4 space-y-3 sm:mt-6 sm:space-y-4'>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm text-[var(--color-text-secondary)]'>Provider</span>
+                <span className='font-medium text-[var(--color-logic-navy)]'>
+                  {settings?.llm?.label || '—'}
+                </span>
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm text-[var(--color-text-secondary)]'>Model</span>
+                <span className='font-mono text-sm font-medium text-[var(--color-logic-navy)]'>
+                  {settings?.llm?.model || '—'}
+                </span>
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm text-[var(--color-text-secondary)]'>Status</span>
+                <span
+                  className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-sm font-medium ${
+                    settings?.llm?.status === 'connected'
+                      ? 'bg-green-50 text-green-700'
+                      : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {settings?.llm?.status === 'connected' ? (
+                    <Cpu className='h-3.5 w-3.5' />
+                  ) : (
+                    <AlertTriangle className='h-3.5 w-3.5' />
+                  )}
+                  {settings?.llm?.status === 'connected' ? 'Connected' : 'Error'}
                 </span>
               </div>
             </div>
@@ -306,6 +355,20 @@ export default function SettingsPage() {
           </div>
         </div>
       </main>
+
+      {/* Cleanup Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showCleanupModal}
+        onClose={() => setShowCleanupModal(false)}
+        onConfirm={confirmCleanup}
+        title='Database Cleanup'
+        message={
+          'Are you sure you want to run database cleanup? This will delete:\n\n- All sessions\n- All completed/failed workflows\n\nThis action cannot be undone.'
+        }
+        confirmLabel='Run Cleanup'
+        variant='danger'
+        isLoading={isCleaning}
+      />
     </div>
   );
 }

@@ -9,22 +9,36 @@ import {
   ExternalServiceError,
 } from '@/lib/errors';
 import { log } from '@/lib/logger';
+import { validateSwaggerUrlFull } from '@/lib/utils/url-validator';
 
 const createSessionSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
   swaggerUrl: z.string().url('Invalid URL format'),
 });
 
-// GET /api/session - List all sessions
-export async function GET() {
+// GET /api/session - List all sessions with pagination
+export async function GET(request: NextRequest) {
   try {
-    log.info('Fetching all sessions');
+    // Parse pagination params
+    const searchParams = request.nextUrl.searchParams;
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
 
-    const sessions = await sessionService.findAll();
+    // Validate pagination params
+    const validatedPage = Math.max(1, page);
+    const validatedLimit = Math.min(100, Math.max(1, limit));
 
-    log.info('Sessions fetched', { count: sessions.length });
+    log.info('Fetching sessions', { page: validatedPage, limit: validatedLimit });
 
-    return createSuccessResponse({ sessions });
+    const result = await sessionService.findAll(validatedPage, validatedLimit);
+
+    log.info('Sessions fetched', {
+      count: result.sessions.length,
+      total: result.pagination.total,
+      page: result.pagination.page,
+    });
+
+    return createSuccessResponse(result);
   } catch (error) {
     log.error('Failed to list sessions', error, { route: 'GET /api/session' });
     return handleApiError(error);
@@ -53,6 +67,12 @@ export async function POST(request: NextRequest) {
         fields[path].push(err.message);
       });
       throw new ValidationError('Invalid input', fields);
+    }
+
+    // Validate URL security (protocol and IP restrictions)
+    const urlValidation = validateSwaggerUrlFull(validation.data.swaggerUrl);
+    if (!urlValidation.valid) {
+      throw new ValidationError('Invalid URL', { swaggerUrl: [urlValidation.error!] });
     }
 
     log.info('Creating new session', {

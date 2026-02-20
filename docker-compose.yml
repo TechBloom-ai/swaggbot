@@ -14,10 +14,18 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/swaggbot.db
+      - SESSION_SECRET=${SESSION_SECRET}
       - LLM_PROVIDER=${LLM_PROVIDER:-moonshot}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
       - MOONSHOT_MODEL=${MOONSHOT_MODEL:-kimi-k2.5}
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3003}
       - RUNNING_IN_DOCKER=true
     volumes:
       - swaggbot-data:/app/data
@@ -42,9 +50,17 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/swaggbot.db
+      - SESSION_SECRET=${SESSION_SECRET}
       - LLM_PROVIDER=${LLM_PROVIDER:-moonshot}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
       - MOONSHOT_MODEL=${MOONSHOT_MODEL:-kimi-k2.5}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
       - RUNNING_IN_DOCKER=true
     volumes:
       - swaggbot-data:/app/data

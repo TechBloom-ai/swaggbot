@@ -1,42 +1,77 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { parse } from 'shell-quote';
 
 import { ExecutionResult } from '@/lib/types';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
- * When running inside Docker, rewrite localhost/127.0.0.1 URLs to host.docker.internal
- * so curl can reach services running on the host machine.
+ * Parse a curl command string into an array of arguments.
+ * Uses shell-quote to properly handle quotes, escaping, and special characters.
  */
-function rewriteLocalhostForDocker(command: string): string {
+function parseCurlCommand(command: string): string[] {
+  const parsed = parse(command);
+  // Filter out any non-string elements (like operators) and return only the arguments
+  return parsed.filter((arg): arg is string => typeof arg === 'string');
+}
+
+/**
+ * Rewrite localhost URLs in command arguments for Docker compatibility.
+ */
+function rewriteLocalhostArgs(args: string[]): string[] {
   if (process.env.RUNNING_IN_DOCKER !== 'true') {
-    return command;
+    return args;
   }
 
-  return command
-    .replace(/http:\/\/localhost/g, 'http://host.docker.internal')
-    .replace(/https:\/\/localhost/g, 'https://host.docker.internal')
-    .replace(/http:\/\/127\.0\.0\.1/g, 'http://host.docker.internal')
-    .replace(/https:\/\/127\.0\.0\.1/g, 'https://host.docker.internal');
+  return args.map(arg => {
+    return arg
+      .replace(/http:\/\/localhost/g, 'http://host.docker.internal')
+      .replace(/https:\/\/localhost/g, 'https://host.docker.internal')
+      .replace(/http:\/\/127\.0\.0\.1/g, 'http://host.docker.internal')
+      .replace(/https:\/\/127\.0\.0\.1/g, 'https://host.docker.internal');
+  });
+}
+
+/**
+ * Add silent mode (-s) and HTTP code extraction (-w) flags if not present.
+ */
+function addRequiredFlags(args: string[]): string[] {
+  const hasSilent = args.includes('-s');
+  const hasWriteOut = args.includes('-w') || args.some(arg => arg.startsWith('-w'));
+
+  const result = [...args];
+
+  if (!hasSilent) {
+    result.push('-s');
+  }
+
+  if (!hasWriteOut) {
+    result.push('-w', '\nHTTP_CODE:%{http_code}');
+  }
+
+  return result;
 }
 
 export async function executeCurl(curlCommand: string, timeout = 30000): Promise<ExecutionResult> {
   try {
+    // Parse the curl command into arguments
+    let args = parseCurlCommand(curlCommand);
+
+    // Remove the 'curl' command itself from the args array
+    if (args[0] === 'curl') {
+      args = args.slice(1);
+    }
+
     // Rewrite localhost URLs when running inside Docker
-    let command = rewriteLocalhostForDocker(curlCommand);
+    args = rewriteLocalhostArgs(args);
 
-    // Add -s flag for silent mode and -w for HTTP code if not present
-    if (!command.includes(' -s')) {
-      command += ' -s';
-    }
+    // Add required flags
+    args = addRequiredFlags(args);
 
-    if (!command.includes(' -w')) {
-      command += ' -w "\\nHTTP_CODE:%{http_code}"';
-    }
-
-    // Execute the curl command
-    const { stdout, stderr } = await execAsync(command, {
+    // Execute the curl command using execFile with arguments array
+    // This prevents shell injection as no shell is spawned
+    const { stdout, stderr } = await execFileAsync('curl', args, {
       timeout,
       maxBuffer: 1024 * 1024, // 1MB buffer
     });
@@ -106,6 +141,16 @@ export function extractTokenFromResponse(response: unknown, tokenPath: string): 
 export function validateCurlCommand(curl: string): { valid: boolean; error?: string } {
   if (!curl.trim().startsWith('curl')) {
     return { valid: false, error: 'Command must start with "curl"' };
+  }
+
+  // Check for shell metacharacters that could indicate command injection
+  // This is defense-in-depth since we now use execFile, but catches obvious attempts early
+  const shellMetacharacters = /[;&|`$]/;
+  if (shellMetacharacters.test(curl)) {
+    return {
+      valid: false,
+      error: 'Command contains shell metacharacters which are not allowed',
+    };
   }
 
   // Check for dangerous flags (match as standalone flags, not as substrings of other values)

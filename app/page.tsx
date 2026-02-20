@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, MessageSquare, Trash2, Bot, Settings } from 'lucide-react';
 
-import { SessionListSkeleton, EmptyState, Spinner } from '@/components/ui';
+import { SessionListSkeleton, EmptyState, Spinner, ConfirmModal } from '@/components/ui';
 import { toast } from '@/stores/toastStore';
+import { LogoutButton } from '@/components/auth';
 
 import { TechBloomBanner } from './sessions/TechBloomBanner';
 
@@ -23,6 +24,9 @@ export default function Home() {
   const [newSessionName, setNewSessionName] = useState('');
   const [newSwaggerUrl, setNewSwaggerUrl] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
 
   // Fetch sessions on load
@@ -91,24 +95,34 @@ export default function Home() {
 
   const deleteSession = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this session?')) {
+    setSessionToDelete(id);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!sessionToDelete) {
       return;
     }
 
+    setIsDeleting(true);
     try {
-      const response = await fetch(`/api/session/${id}`, {
+      const response = await fetch(`/api/session/${sessionToDelete}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
-        setSessions(sessions.filter(s => s.id !== id));
+        setSessions(sessions.filter(s => s.id !== sessionToDelete));
         toast.success('Session deleted', 'The session has been removed');
+        setShowDeleteModal(false);
+        setSessionToDelete(null);
       } else {
         toast.error('Failed to delete session', 'Please try again');
       }
     } catch (error) {
       console.error('Failed to delete session:', error);
       toast.error('Failed to delete session', 'Please check your connection and try again');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -125,6 +139,7 @@ export default function Home() {
               </h1>
             </div>
             <div className='flex gap-2'>
+              <LogoutButton />
               <button
                 onClick={() => router.push('/settings')}
                 className='flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-4 py-2 text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'
@@ -279,6 +294,21 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Delete Session Modal */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setSessionToDelete(null);
+        }}
+        onConfirm={confirmDeleteSession}
+        title='Delete Session'
+        message='Are you sure you want to delete this session?'
+        confirmLabel='Delete'
+        variant='danger'
+        isLoading={isDeleting}
+      />
 
       <footer className='mt-auto'>
         <TechBloomBanner />

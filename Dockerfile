@@ -26,24 +26,25 @@ RUN apk add --no-cache curl
 RUN npm install -g pnpm
 
 # Copy necessary files from builder
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/pnpm-lock.yaml ./
-COPY --from=builder /app/next.config.ts ./
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/PROMPTS.md ./
+COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/PROMPTS.md ./
-# Also copy PROMPTS.md to standalone directory for standalone mode
-COPY --from=builder /app/PROMPTS.md ./.next/standalone/
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+# Copy and setup entrypoint script
+COPY scripts/docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create data directory
 RUN mkdir -p data
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3003
 
 # Start the application
-CMD ["pnpm", "start"]
+CMD ["/usr/local/bin/docker-entrypoint.sh"]
