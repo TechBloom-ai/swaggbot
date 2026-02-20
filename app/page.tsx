@@ -8,6 +8,7 @@ import { SessionListSkeleton, EmptyState, Spinner } from '@/components/ui';
 import { toast } from '@/stores/toastStore';
 
 import { TechBloomBanner } from './sessions/TechBloomBanner';
+import LogoutButton from './components/LogoutButton';
 
 interface Session {
   id: string;
@@ -125,6 +126,7 @@ export default function Home() {
               </h1>
             </div>
             <div className='flex gap-2'>
+              <LogoutButton />
               <button
                 onClick={() => router.push('/settings')}
                 className='flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-4 py-2 text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'

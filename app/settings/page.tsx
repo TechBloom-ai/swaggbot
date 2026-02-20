@@ -18,6 +18,7 @@ import {
 
 import { toast } from '@/stores/toastStore';
 import { Spinner } from '@/components/ui';
+import LogoutButton from '@/app/components/LogoutButton';
 
 interface AppInfo {
   name: string;
@@ -130,19 +131,22 @@ export default function SettingsPage() {
       {/* Header */}
       <header className='border-b border-[var(--color-border)] bg-white'>
         <div className='mx-auto max-w-5xl px-3 py-3 sm:px-4 sm:py-4 lg:px-8'>
-          <div className='flex items-center gap-2 sm:gap-4'>
-            <button
-              onClick={() => router.push('/')}
-              className='rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-alt)]'
-            >
-              <ArrowLeft className='h-4 w-4 sm:h-5 sm:w-5' />
-            </button>
-            <div className='flex items-center gap-2'>
-              <Settings className='h-5 w-5 text-[var(--color-circuit-green)]' />
-              <h1 className='text-lg font-semibold text-[var(--color-logic-navy)] sm:text-xl'>
-                Settings
-              </h1>
+          <div className='flex items-center justify-between gap-2 sm:gap-4'>
+            <div className='flex items-center gap-2 sm:gap-4'>
+              <button
+                onClick={() => router.push('/')}
+                className='rounded-lg p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-alt)]'
+              >
+                <ArrowLeft className='h-4 w-4 sm:h-5 sm:w-5' />
+              </button>
+              <div className='flex items-center gap-2'>
+                <Settings className='h-5 w-5 text-[var(--color-circuit-green)]' />
+                <h1 className='text-lg font-semibold text-[var(--color-logic-navy)] sm:text-xl'>
+                  Settings
+                </h1>
+              </div>
             </div>
+            <LogoutButton />
           </div>
         </div>
       </header>
