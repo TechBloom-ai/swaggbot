@@ -496,7 +496,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 
       case 'swaggbot_list_sessions': {
         const sessions = await sessionService.findAll();
-        if (sessions.length === 0) {
+        if (sessions.sessions.length === 0) {
           return {
             content: [
               {
@@ -506,7 +506,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
             ],
           };
         }
-        const sessionList = sessions.map(s => `- ${s.name} (ID: ${s.id})`).join('\n');
+        const sessionList = sessions.sessions.map(s => `- ${s.name} (ID: ${s.id})`).join('\n');
         return {
           content: [
             {
@@ -628,7 +628,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 
         const workflows = await workflowService.findBySessionId(sessionId);
 
-        if (workflows.length === 0) {
+        if (workflows.workflows.length === 0) {
           return {
             content: [
               {
@@ -639,7 +639,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
           };
         }
 
-        const workflowList = workflows
+        const workflowList = workflows.workflows
           .map(w => {
             const status =
               w.status === 'completed'

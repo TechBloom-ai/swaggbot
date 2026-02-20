@@ -46,8 +46,12 @@ export class ChatOrchestrator {
     await sessionService.updateLastAccessed(input.sessionId);
 
     // 3. Load message history
-    const recentMessages = await messageService.getRecentMessages(input.sessionId, 10);
-    const history = this.convertMessagesToLLMFormat(recentMessages);
+    const recentMessagesResult = await messageService.getRecentMessages(
+      input.sessionId,
+      undefined,
+      10
+    );
+    const history = this.convertMessagesToLLMFormat(recentMessagesResult.messages);
 
     // 4. Save user message
     await messageService.create({

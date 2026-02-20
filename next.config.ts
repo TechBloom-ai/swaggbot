@@ -9,11 +9,11 @@ const nextConfig: NextConfig = {
   async headers() {
     const isDev = process.env.NODE_ENV === 'development';
 
-    // CSP for production - strict
+    // CSP for production - strict but allows inline scripts for Next.js
     const prodCsp = `
       default-src 'self';
-      script-src 'self';
-      style-src 'self';
+      script-src 'self' 'unsafe-inline';
+      style-src 'self' 'unsafe-inline';
       font-src 'self' fonts.gstatic.com;
       connect-src 'self';
       img-src 'self' data: blob:;
