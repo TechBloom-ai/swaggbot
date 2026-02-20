@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Add filter logic in llm
 
+- Create changelog
 
 ### Changed
 
@@ -68,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Multi-provider LLM support
 
+- Rate limit in .env-example
 
 ### Removed
 
@@ -88,6 +90,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Fix components folder
 
+- Fix docker
+
+- Fix docker
 
 ### Documentation
 

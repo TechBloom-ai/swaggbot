@@ -12,12 +12,12 @@
 ```bash
 # Docker (recommended)
 git clone https://github.com/techbloom-ai/swaggbot.git
-cd swaggbot && cp .env.example .env  
-# Edit .env with your API keys
+cd swaggbot && cp .env.example .env
+# Generate SESSION_SECRET and add LLM API keys
 docker-compose up -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000) → Paste Swagger URL → Start chatting.
+Open [http://localhost:3003](http://localhost:3003)
 
 ---
 
@@ -38,9 +38,10 @@ Swaggbot converts any Swagger/OpenAPI documented API into a conversational inter
 - 🔄 **Workflow Automation** — Chain multiple API calls with dependency resolution
 - 🔌 **MCP Server** — Use with Claude Desktop, Cursor, Windsurf
 - 🏠 **Self-Hosted** — Your data, your infrastructure
-- 🔐 **Auth Token Extraction** — Automatic session management
+- 🔐 **Session Management** — Encrypted auth tokens, per-session isolation
 - 🌐 **Multi-Provider LLM** — Moonshot, OpenAI, Anthropic, Ollama
 - 📊 **Array Filtering** — `[name=John].id` syntax for data extraction
+- 🛡️ **Security** — CSP headers, rate limiting, encrypted storage
 
 ---
 
@@ -78,12 +79,24 @@ Swaggbot converts any Swagger/OpenAPI documented API into a conversational inter
 ### Docker (Recommended)
 
 ```bash
-docker run -d \
-  -p 3000:3000 \
-  -e MOONSHOT_API_KEY=your_key \
-  -v swaggbot-data:/app/data \
-  swaggbot/swaggbot:latest
+# 1. Clone and configure
+git clone https://github.com/techbloom-ai/swaggbot.git
+cd swaggbot
+cp .env.example .env
+
+# 2. Set SESSION_SECRET (required for auth)
+# Linux/macOS:
+export SESSION_SECRET=$(openssl rand -base64 32)
+# Or add to .env: SESSION_SECRET=your_random_secret_here
+
+# 3. Add your LLM API key to .env
+# MOONSHOT_API_KEY=your_key_here
+
+# 4. Start
+docker-compose up -d
 ```
+
+**Database migrations run automatically** on first startup.
 
 ### Local Development
 
@@ -92,7 +105,7 @@ git clone https://github.com/techbloom-ai/swaggbot.git
 cd swaggbot
 pnpm install
 cp .env.example .env.local
-# Edit .env.local with your API keys
+# Edit .env.local with SESSION_SECRET and LLM API keys
 pnpm db:migrate
 pnpm dev
 ```
@@ -103,15 +116,25 @@ pnpm dev
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `SESSION_SECRET` | **Yes** | — | Random secret for session encryption (min 32 chars) |
 | `MOONSHOT_API_KEY` | Yes* | — | Moonshot AI API key |
 | `OPENAI_API_KEY` | Yes* | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Yes* | — | Anthropic API key |
 | `OLLAMA_BASE_URL` | Yes* | — | Ollama server URL |
 | `LLM_PROVIDER` | No | `moonshot` | `moonshot` \| `openai` \| `anthropic` \| `ollama` |
 | `DATABASE_URL` | No | `file:./data/swaggbot.db` | SQLite database path |
-| `CLEANUP_ENABLED` | No | `true` | Auto-cleanup old sessions |
+| `NEXT_PUBLIC_APP_URL` | No | `http://localhost:3003` | App base URL |
 
 \*At least one LLM provider required
+
+### Generate SESSION_SECRET
+
+```bash
+# Linux/macOS
+openssl rand -base64 32
+
+# Or any random string (min 32 characters)
+```
 
 ---
 
@@ -119,13 +142,16 @@ pnpm dev
 
 ### REST API
 
+All endpoints require authentication via session cookie.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/session` | POST | Create session from Swagger URL |
+| `/api/auth/login` | POST | Authenticate and create session |
+| `/api/session` | POST | Create API session from Swagger URL |
+| `/api/session` | GET | List all sessions (paginated) |
 | `/api/chat` | POST | Send message to API |
 | `/api/workflow` | POST | Create multi-step workflow |
-
-[Full API Documentation →](https://www.swaggbot.com/wiki/guides/api)
+| `/api/workflow/:id/execute` | POST | Execute workflow |
 
 ### MCP Server
 
@@ -133,31 +159,46 @@ pnpm dev
 {
   "mcpServers": {
     "swaggbot": {
-      "command": "npx",
-      "args": ["-y", "swaggbot-mcp"],
-      "env": { "SWAGGBOT_API_URL": "http://localhost:3000" }
+      "command": "docker",
+      "args": ["compose", "run", "--rm", "swaggbot-mcp"],
+      "env": {
+        "SESSION_SECRET": "your_secret",
+        "MOONSHOT_API_KEY": "your_key"
+      }
     }
   }
 }
 ```
-
-[MCP Integration Guide →](https://www.swaggbot.com/wiki/guides/mcp)
 
 ---
 
 ## Usage Examples
 
 ### Web UI
-```text
-User: Create a user named John with email john@example.com
-Swaggbot: [POST /users] Created user ID 123
-```
+
+1. Navigate to login page
+2. Create a session with your Swagger URL
+3. Start chatting:
+   ```
+   "Create a user named John"
+   "List all pets with status available"
+   "Execute the login workflow"
+   ```
 
 ### API
+
 ```bash
-curl -X POST http://localhost:3000/api/chat \
+# Authenticate
+curl -X POST http://localhost:3003/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"sessionId": "...", "message": "List all pets"}'
+  -d '{"password": "your_password"}' \
+  -c cookies.txt
+
+# Chat with API
+curl -X POST http://localhost:3003/api/chat \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"sessionId": "...", "message": "List all users"}'
 ```
 
 ---
@@ -175,7 +216,7 @@ curl -X POST http://localhost:3000/api/chat \
 | LLM SDK | Vercel AI SDK patterns |
 | MCP | Model Context Protocol SDK |
 | Testing | Vitest |
-| Container | Docker |
+| Container | Docker + Docker Compose |
 
 ---
 
@@ -183,36 +224,19 @@ curl -X POST http://localhost:3000/api/chat \
 
 ```
 swaggbot/
-├── app/              # Next.js App Router
-├── components/       # shadcn/ui components
+├── app/                 # Next.js App Router
+│   ├── api/            # API routes
+│   ├── sessions/       # Session UI
+│   └── settings/       # Settings page
+├── components/         # shadcn/ui components
 ├── lib/
-│   ├── db/          # Database schema & client
-│   ├── llm/         # LLM provider implementations
-│   ├── services/    # Business logic
-│   └── prompts/     # LLM prompt management
-├── scripts/         # MCP server
-└── data/            # SQLite storage
-```
-
----
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
-
-### Development Setup
-
-```bash
-pnpm install
-pnpm db:migrate
-pnpm dev
-```
-
-### Running Tests
-
-```bash
-pnpm test
-pnpm test:coverage
+│   ├── db/            # Database schema & migrations
+│   ├── llm/           # LLM provider implementations
+│   ├── services/      # Business logic
+│   ├── auth/          # Session & encryption
+│   └── prompts/       # LLM prompt management
+├── scripts/           # MCP server & entrypoint
+└── data/              # SQLite storage (Docker volume)
 ```
 
 ---
@@ -220,8 +244,10 @@ pnpm test:coverage
 ## Security
 
 - **Local-first**: All data stored locally in SQLite
-- **No data retention**: Swaggbot doesn't persist API responses
-- **Secure token storage**: Auth tokens encrypted at rest
+- **Encrypted tokens**: Auth tokens encrypted with AES-256-GCM
+- **Session-based auth**: Password-protected access
+- **CSP headers**: Content Security Policy protection
+- **Rate limiting**: Per-endpoint limits configurable
 - **No telemetry**: Zero analytics or tracking
 
 ---
