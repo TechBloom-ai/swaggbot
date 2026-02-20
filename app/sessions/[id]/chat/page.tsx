@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Bot, User, ArrowLeft, Terminal, CheckCircle, XCircle } from 'lucide-react';
+import { Send, Bot, User, ArrowLeft, Terminal, CheckCircle, XCircle, Settings } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 import { useChatStore } from '@/stores/chatStore';
@@ -165,7 +165,7 @@ export default function ChatPage() {
           <div className='flex items-center gap-2 sm:gap-3 min-w-0'>
             <button
               onClick={() => router.push('/')}
-              className='rounded-lg p-1.5 sm:p-2 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-alt)] flex-shrink-0'
+              className='rounded-lg p-1.5 sm:p-2 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white flex-shrink-0'
               aria-label='Go back'
             >
               <ArrowLeft className='h-4 w-4 sm:h-5 sm:w-5' />
@@ -179,13 +179,23 @@ export default function ChatPage() {
               </p>
             </div>
           </div>
-          <div className='flex items-center flex-shrink-0'>
-            <span className='font-bold text-sm sm:text-base text-[var(--color-circuit-green)]'>
-              Swagg
-            </span>
-            <span className='font-bold text-sm sm:text-base text-[var(--color-logic-navy)]'>
-              Bot
-            </span>
+          <div className='flex items-center gap-2 sm:gap-3 flex-shrink-0'>
+            <button
+              onClick={() => router.push(`/sessions/${sessionId}`)}
+              className='rounded-lg p-1.5 sm:p-2 text-[var(--color-text-secondary)] hover:text-white transition-colors hover:bg-[var(--color-background-alt)] hover:text-[var(--color-logic-navy)]'
+              title='Session Settings'
+              aria-label='Session Settings'
+            >
+              <Settings className='h-4 w-4 sm:h-5 sm:w-5' />
+            </button>
+            <div className='flex items-center'>
+              <span className='font-bold text-sm sm:text-base text-[var(--color-circuit-green)]'>
+                Swagg
+              </span>
+              <span className='font-bold text-sm sm:text-base text-[var(--color-logic-navy)]'>
+                Bot
+              </span>
+            </div>
           </div>
         </div>
       </header>

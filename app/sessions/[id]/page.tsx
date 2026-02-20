@@ -17,9 +17,12 @@ import {
   ExternalLink,
   Copy,
   CheckCircle,
+  RefreshCw,
+  Eraser,
 } from 'lucide-react';
 
 import { toast } from '@/stores/toastStore';
+import { useChatStore } from '@/stores/chatStore';
 import { Spinner } from '@/components/ui';
 
 interface Session {
@@ -58,6 +61,8 @@ export default function SessionDetailPage() {
   const [swaggerDoc, setSwaggerDoc] = useState<Record<string, unknown> | null>(null);
   const [showSwagger, setShowSwagger] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
 
   useEffect(() => {
     fetchSession();
@@ -219,6 +224,80 @@ export default function SessionDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleRefreshSwagger = async () => {
+    if (!session?.swaggerUrl) {
+      toast.error('No Swagger URL', 'This session does not have a Swagger URL configured');
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      const response = await fetch(`/api/session/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ swaggerUrl: session.swaggerUrl }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const updatedSession = result.data?.session || result.session;
+        setSession(updatedSession);
+
+        // Re-parse the swagger doc
+        if (updatedSession.swaggerDoc) {
+          try {
+            const parsed = JSON.parse(updatedSession.swaggerDoc);
+            setSwaggerDoc(parsed);
+          } catch {
+            console.error('Failed to parse swagger doc');
+          }
+        }
+
+        toast.success('Swagger refreshed', 'API documentation has been updated');
+      } else {
+        const error = await response.json();
+        toast.error('Failed to refresh Swagger', error.error?.message || 'Please try again');
+      }
+    } catch (error) {
+      console.error('Failed to refresh swagger:', error);
+      toast.error('Failed to refresh Swagger', 'Please check your connection');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleClearChat = async () => {
+    setIsCleaning(true);
+    try {
+      const response = await fetch(`/api/session/${sessionId}/clear-chat`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const deletedCount = result.data?.deletedCount || 0;
+        toast.success(
+          'Chat cleared',
+          deletedCount > 0
+            ? `${deletedCount} message${deletedCount === 1 ? '' : 's'} deleted`
+            : 'All messages have been deleted'
+        );
+        // Clear messages from store so they don't reappear in chat
+        useChatStore.getState().clearSession(sessionId);
+        // Refresh stats to update message count
+        fetchStats();
+      } else {
+        const error = await response.json();
+        toast.error('Failed to clear chat', error.error?.message || 'Please try again');
+      }
+    } catch (error) {
+      console.error('Failed to clear chat:', error);
+      toast.error('Failed to clear chat', 'Please check your connection');
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className='flex min-h-screen items-center justify-center bg-[var(--color-background)]'>
@@ -307,13 +386,37 @@ export default function SessionDetailPage() {
               <h2 className='text-xs sm:text-sm font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]'>
                 Actions
               </h2>
-              <div className='mt-2 sm:mt-4 grid grid-cols-2 sm:grid-cols-1 gap-2 sm:gap-3'>
+              <div className='mt-2 sm:mt-4 flex flex-col gap-2 sm:gap-3'>
                 <button
                   onClick={() => router.push(`/sessions/${sessionId}/chat`)}
                   className='flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-circuit-green)] px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-white transition-colors hover:bg-[var(--color-circuit-green-dark)]'
                 >
                   <MessageSquare className='h-4 w-4' />
                   <span className='whitespace-nowrap'>Open Chat</span>
+                </button>
+                <button
+                  onClick={handleRefreshSwagger}
+                  disabled={isRefreshing}
+                  className='flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white disabled:opacity-50'
+                >
+                  {isRefreshing ? (
+                    <Spinner className='h-4 w-4' />
+                  ) : (
+                    <RefreshCw className='h-4 w-4' />
+                  )}
+                  <span className='whitespace-nowrap'>
+                    {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                  </span>
+                </button>
+                <button
+                  onClick={handleClearChat}
+                  disabled={isCleaning}
+                  className='flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50'
+                >
+                  {isCleaning ? <Spinner className='h-4 w-4' /> : <Eraser className='h-4 w-4' />}
+                  <span className='whitespace-nowrap'>
+                    {isCleaning ? 'Clearing...' : 'Clean Chat'}
+                  </span>
                 </button>
                 <button
                   onClick={handleDeleteSession}
