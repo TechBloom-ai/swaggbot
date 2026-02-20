@@ -3,7 +3,7 @@ import { log } from '@/lib/logger';
 
 import { BaseLLMProvider } from './base';
 
-interface MoonshotResponse {
+interface OpenAIResponse {
   id: string;
   object: string;
   created: number;
@@ -23,21 +23,22 @@ interface MoonshotResponse {
   };
 }
 
-export class MoonshotProvider extends BaseLLMProvider {
-  readonly name = 'moonshot';
+export class OpenAIProvider extends BaseLLMProvider {
+  readonly name = 'openai';
 
   private apiKey: string;
   private model: string;
-  private baseUrl = 'https://api.moonshot.ai/v1';
+  private baseUrl: string;
 
   constructor() {
     super({ temperature: 1, maxTokens: 4000 });
 
-    this.apiKey = process.env.MOONSHOT_API_KEY || '';
-    this.model = process.env.MOONSHOT_MODEL || 'kimi-k2.5';
+    this.apiKey = process.env.OPENAI_API_KEY || '';
+    this.model = process.env.OPENAI_MODEL || 'gpt-4o';
+    this.baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 
     if (!this.apiKey) {
-      throw new Error('MOONSHOT_API_KEY environment variable is required');
+      throw new Error('OPENAI_API_KEY environment variable is required');
     }
   }
 
@@ -49,7 +50,7 @@ export class MoonshotProvider extends BaseLLMProvider {
       max_tokens: this.config.maxTokens,
     };
 
-    log.info('Moonshot API Request', {
+    log.info('OpenAI API Request', {
       model: this.model,
       messageCount: messages.length,
       totalChars: messages.reduce((sum, m) => sum + m.content.length, 0),
@@ -67,13 +68,13 @@ export class MoonshotProvider extends BaseLLMProvider {
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Moonshot API error: ${response.status} ${error}`);
+      throw new Error(`OpenAI API error: ${response.status} ${error}`);
     }
 
-    const data: MoonshotResponse = await response.json();
+    const data: OpenAIResponse = await response.json();
     const content = data.choices[0]?.message?.content || '';
 
-    log.info('Moonshot API Response', {
+    log.info('OpenAI API Response', {
       contentLength: content.length,
       finishReason: data.choices[0]?.finish_reason,
       usage: data.usage,

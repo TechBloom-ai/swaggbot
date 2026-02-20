@@ -14,6 +14,8 @@ import {
   MessageSquare,
   CheckCircle,
   AlertTriangle,
+  Brain,
+  Cpu,
 } from 'lucide-react';
 
 import { toast } from '@/stores/toastStore';
@@ -35,8 +37,16 @@ interface DatabaseStats {
   sizeFormatted: string;
 }
 
+interface LLMInfo {
+  provider: string;
+  label: string;
+  model: string;
+  status: string;
+}
+
 interface SettingsData {
   appInfo: AppInfo;
+  llm: LLMInfo;
   database: DatabaseStats;
 }
 
@@ -184,6 +194,46 @@ export default function SettingsPage() {
                 <span className='text-sm text-[var(--color-text-secondary)]'>Node.js</span>
                 <span className='font-mono text-xs text-[var(--color-text-secondary)] sm:text-sm'>
                   {settings?.appInfo.nodeVersion}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* LLM Provider */}
+          <div className='rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-6'>
+            <h2 className='flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)] sm:text-sm'>
+              <Brain className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
+              LLM Provider
+            </h2>
+
+            <div className='mt-4 space-y-3 sm:mt-6 sm:space-y-4'>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm text-[var(--color-text-secondary)]'>Provider</span>
+                <span className='font-medium text-[var(--color-logic-navy)]'>
+                  {settings?.llm?.label || '—'}
+                </span>
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm text-[var(--color-text-secondary)]'>Model</span>
+                <span className='font-mono text-sm font-medium text-[var(--color-logic-navy)]'>
+                  {settings?.llm?.model || '—'}
+                </span>
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm text-[var(--color-text-secondary)]'>Status</span>
+                <span
+                  className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-sm font-medium ${
+                    settings?.llm?.status === 'connected'
+                      ? 'bg-green-50 text-green-700'
+                      : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {settings?.llm?.status === 'connected' ? (
+                    <Cpu className='h-3.5 w-3.5' />
+                  ) : (
+                    <AlertTriangle className='h-3.5 w-3.5' />
+                  )}
+                  {settings?.llm?.status === 'connected' ? 'Connected' : 'Error'}
                 </span>
               </div>
             </div>
