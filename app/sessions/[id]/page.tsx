@@ -14,7 +14,6 @@ import {
   X,
   Eye,
   EyeOff,
-  ExternalLink,
   Copy,
   CheckCircle,
   RefreshCw,
@@ -23,7 +22,7 @@ import {
 
 import { toast } from '@/stores/toastStore';
 import { useChatStore } from '@/stores/chatStore';
-import { Spinner } from '@/components/ui';
+import { Spinner, ConfirmModal } from '@/components/ui';
 
 interface Session {
   id: string;
@@ -63,6 +62,8 @@ export default function SessionDetailPage() {
   const [copied, setCopied] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [showDeleteTokenModal, setShowDeleteTokenModal] = useState(false);
+  const [showDeleteSessionModal, setShowDeleteSessionModal] = useState(false);
 
   useEffect(() => {
     fetchSession();
@@ -171,10 +172,10 @@ export default function SessionDetailPage() {
   };
 
   const handleDeleteToken = async () => {
-    if (!confirm('Are you sure you want to remove the authentication token?')) {
-      return;
-    }
+    setShowDeleteTokenModal(true);
+  };
 
+  const confirmDeleteToken = async () => {
     try {
       const response = await fetch(`/api/session/${sessionId}`, {
         method: 'PATCH',
@@ -187,6 +188,7 @@ export default function SessionDetailPage() {
         const updatedSession = result.data?.session || result.session;
         setSession(updatedSession);
         toast.success('Token removed', 'Authentication token has been deleted');
+        setShowDeleteTokenModal(false);
       } else {
         toast.error('Failed to remove token', 'Please try again');
       }
@@ -197,16 +199,17 @@ export default function SessionDetailPage() {
   };
 
   const handleDeleteSession = async () => {
-    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-      return;
-    }
+    setShowDeleteSessionModal(true);
+  };
 
+  const confirmDeleteSession = async () => {
     try {
       const response = await fetch(`/api/session/${sessionId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
+        setShowDeleteSessionModal(false);
         toast.success('Session deleted', 'Redirecting to home...');
         router.push('/');
       } else {
@@ -537,27 +540,29 @@ export default function SessionDetailPage() {
                   </p>
                 )}
 
-                <div className='mt-3 sm:mt-4 space-y-1.5 sm:space-y-2'>
-                  <label className='text-xs sm:text-sm font-medium text-[var(--color-logic-navy)]'>
-                    {session.authToken ? 'Update Token' : 'Set Token'}
-                  </label>
-                  <div className='flex flex-col sm:flex-row gap-2'>
-                    <input
-                      type='text'
-                      value={newToken}
-                      onChange={e => setNewToken(e.target.value)}
-                      placeholder='Enter Bearer token...'
-                      className='flex-1 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-[var(--color-circuit-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-circuit-green)]'
-                    />
-                    <button
-                      onClick={handleUpdateToken}
-                      disabled={isUpdatingToken || !newToken.trim()}
-                      className='rounded-lg bg-[var(--color-circuit-green)] px-4 py-2 text-sm text-white transition-colors hover:bg-[var(--color-circuit-green-dark)] disabled:opacity-50 whitespace-nowrap'
-                    >
-                      {isUpdatingToken ? <Spinner className='h-4 w-4' /> : 'Save'}
-                    </button>
+                {!session.authToken && (
+                  <div className='mt-3 sm:mt-4 space-y-1.5 sm:space-y-2'>
+                    <label className='text-xs sm:text-sm font-medium text-[var(--color-logic-navy)]'>
+                      Set Token
+                    </label>
+                    <div className='flex flex-col sm:flex-row gap-2'>
+                      <input
+                        type='text'
+                        value={newToken}
+                        onChange={e => setNewToken(e.target.value)}
+                        placeholder='Enter Bearer token...'
+                        className='flex-1 text-logic-navy rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-[var(--color-circuit-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-circuit-green)]'
+                      />
+                      <button
+                        onClick={handleUpdateToken}
+                        disabled={isUpdatingToken || !newToken.trim()}
+                        className='rounded-lg bg-[var(--color-circuit-green)] px-4 py-2 text-sm text-white transition-colors hover:bg-[var(--color-circuit-green-dark)] disabled:opacity-50 whitespace-nowrap'
+                      >
+                        {isUpdatingToken ? <Spinner className='h-4 w-4' /> : 'Save'}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -575,15 +580,6 @@ export default function SessionDetailPage() {
                   >
                     {showSwagger ? 'Hide' : 'View'}
                   </button>
-                  <a
-                    href={session.swaggerUrl}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm text-[var(--color-logic-navy)] transition-colors hover:bg-[var(--color-background-alt)] hover:text-white'
-                  >
-                    <ExternalLink className='h-3 w-3' />
-                    Open
-                  </a>
                 </div>
               </div>
 
@@ -678,7 +674,7 @@ export default function SessionDetailPage() {
                                       <td className='px-2 sm:px-3 py-1.5 sm:py-2 font-mono text-xs text-[var(--color-logic-navy)] truncate max-w-[150px] sm:max-w-none'>
                                         {path}
                                       </td>
-                                      <td className='px-2 sm:px-3 py-1.5 sm:py-2 text-[var(--color-text-secondary)] truncate max-w-[100px] sm:max-w-none'>
+                                      <td className='px-2 sm:px-3 py-1.5 sm:py-2 text-[var(--color-text-secondary)] max-w-[100px] sm:max-w-none'>
                                         {details.summary || '-'}
                                       </td>
                                     </tr>
@@ -697,6 +693,28 @@ export default function SessionDetailPage() {
           </div>
         </div>
       </main>
+
+      {/* Delete Token Modal */}
+      <ConfirmModal
+        isOpen={showDeleteTokenModal}
+        onClose={() => setShowDeleteTokenModal(false)}
+        onConfirm={confirmDeleteToken}
+        title='Remove Authentication Token'
+        message='Are you sure you want to remove the authentication token?'
+        confirmLabel='Remove'
+        variant='danger'
+      />
+
+      {/* Delete Session Modal */}
+      <ConfirmModal
+        isOpen={showDeleteSessionModal}
+        onClose={() => setShowDeleteSessionModal(false)}
+        onConfirm={confirmDeleteSession}
+        title='Delete Session'
+        message='Are you sure you want to delete this session? This action cannot be undone.'
+        confirmLabel='Delete'
+        variant='danger'
+      />
     </div>
   );
 }

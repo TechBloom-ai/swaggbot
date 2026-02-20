@@ -36,10 +36,7 @@
   "dependencies": {
     "@libsql/client": "^0.17.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@tanstack/react-query": "^5.90.21",
-    "ai": "^6.0.86",
     "drizzle-orm": "^0.45.1",
-    "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "lucide-react": "^0.564.0",
     "next": "16.1.6",

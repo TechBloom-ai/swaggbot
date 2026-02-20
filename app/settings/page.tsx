@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 import { toast } from '@/stores/toastStore';
-import { Spinner } from '@/components/ui';
+import { Spinner, ConfirmModal } from '@/components/ui';
 import { LogoutButton } from '@/components/auth';
 
 interface AppInfo {
@@ -59,6 +59,7 @@ export default function SettingsPage() {
     success: boolean;
     deleted?: { sessions?: number; workflows?: number; messages?: number };
   } | null>(null);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -83,17 +84,10 @@ export default function SettingsPage() {
   };
 
   const handleCleanup = async () => {
-    if (
-      !confirm(
-        'Are you sure you want to run database cleanup? This will delete:\n\n' +
-          '- All sessions\n' +
-          '- All Completed/failed workflows\n\n' +
-          'This action cannot be undone.'
-      )
-    ) {
-      return;
-    }
+    setShowCleanupModal(true);
+  };
 
+  const confirmCleanup = async () => {
     setIsCleaning(true);
     setCleanupResult(null);
 
@@ -109,6 +103,7 @@ export default function SettingsPage() {
 
       if (data.success) {
         setCleanupResult({ success: true, deleted: data.deleted });
+        setShowCleanupModal(false);
         toast.success(
           'Cleanup completed',
           `Deleted ${data.deleted.sessions || 0} sessions, ${data.deleted.workflows || 0} workflows`
@@ -360,6 +355,20 @@ export default function SettingsPage() {
           </div>
         </div>
       </main>
+
+      {/* Cleanup Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showCleanupModal}
+        onClose={() => setShowCleanupModal(false)}
+        onConfirm={confirmCleanup}
+        title='Database Cleanup'
+        message={
+          'Are you sure you want to run database cleanup? This will delete:\n\n- All sessions\n- All completed/failed workflows\n\nThis action cannot be undone.'
+        }
+        confirmLabel='Run Cleanup'
+        variant='danger'
+        isLoading={isCleaning}
+      />
     </div>
   );
 }

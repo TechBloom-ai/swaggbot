@@ -10,3 +10,4 @@ export {
 } from './Skeleton';
 export { EmptyState, EmptyStateCompact } from './EmptyState';
 export { ToastContainer } from './Toast';
+export { ConfirmModal } from './ConfirmModal';
