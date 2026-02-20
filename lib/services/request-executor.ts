@@ -54,7 +54,10 @@ export class RequestExecutor {
       results.push(result);
 
       if (!result.success) {
-        log.error(`Step ${step.stepNumber} failed`, new Error(result.error || 'Unknown error'));
+        log.error(
+          `[WORKFLOW] Step ${step.stepNumber} failed`,
+          new Error(result.error || 'Unknown error')
+        );
         return {
           success: false,
           steps: results,
@@ -86,7 +89,11 @@ export class RequestExecutor {
     try {
       // Build and execute curl command
       const curl = this.buildCurlCommand(step, extractedData);
-      log.info(`Executing step ${step.stepNumber}`, { description: step.description });
+      log.info(`[WORKFLOW] Built curl command for step ${step.stepNumber}`, {
+        description: step.description,
+        curl: curl.substring(0, 500),
+        curlLength: curl.length,
+      });
 
       const executionResult = await executeCurl(curl);
 
@@ -161,6 +168,11 @@ export class RequestExecutor {
           new RegExp(`\\{\\{${escapedPlaceholder}\\}\\}`, 'g'),
           String(resolvedValue)
         );
+      } else {
+        log.warn(`[CURL-BUILD] Could not resolve placeholder: {{${placeholderName}}}`, {
+          placeholder: placeholderName,
+          availableFields: Object.keys(extractedData),
+        });
       }
     }
 
@@ -190,14 +202,27 @@ export class RequestExecutor {
 
   /**
    * Resolve placeholders in request body
+   * Option B: Resolve placeholders sequentially - 1st occurrence → step 1, 2nd → step 2, etc.
    */
   private resolveBodyPlaceholders(
     body: Record<string, unknown>,
     step: WorkflowStep,
     extractedData: Record<string, unknown>
   ): string {
-    const fieldToStepMap = this.buildFieldToStepMap(step, extractedData);
     const resolvedBody: Record<string, unknown> = {};
+
+    // Track occurrence count for each placeholder pattern
+    // This allows sequential resolution: 1st {{[0].id}} → step1, 2nd {{[0].id}} → step2, etc.
+    const placeholderOccurrences: Record<string, number> = {};
+
+    log.info('[CURL-BUILD] Starting sequential placeholder resolution', {
+      stepNumber: step.stepNumber,
+      bodyFields: Object.keys(body),
+      availableSteps: Object.keys(extractedData)
+        .filter(k => k.startsWith('step'))
+        .map(k => k.match(/step(\d+)_/)?.[1])
+        .filter((v, i, a) => v && a.indexOf(v) === i),
+    });
 
     for (const [fieldName, fieldValue] of Object.entries(body)) {
       if (
@@ -206,12 +231,34 @@ export class RequestExecutor {
         fieldValue.endsWith('}}')
       ) {
         const placeholderName = fieldValue.slice(2, -2);
-        const resolvedValue = this.resolvePlaceholder(
+
+        // Increment occurrence counter for this placeholder
+        placeholderOccurrences[placeholderName] =
+          (placeholderOccurrences[placeholderName] || 0) + 1;
+        const occurrenceIndex = placeholderOccurrences[placeholderName];
+
+        log.info(`[CURL-BUILD] Resolving body placeholder (occurrence #${occurrenceIndex})`, {
+          fieldName,
+          placeholder: placeholderName,
+          occurrence: occurrenceIndex,
+        });
+
+        // Use sequential resolution strategy
+        const resolvedValue = this.resolvePlaceholderSequential(
           placeholderName,
           fieldName,
-          fieldToStepMap,
+          occurrenceIndex,
+          step,
           extractedData
         );
+
+        log.info(`[CURL-BUILD] Resolved placeholder value`, {
+          fieldName,
+          placeholder: placeholderName,
+          occurrence: occurrenceIndex,
+          resolvedValue: resolvedValue?.toString()?.substring(0, 100),
+        });
+
         resolvedBody[fieldName] = resolvedValue !== undefined ? resolvedValue : fieldValue;
       } else {
         resolvedBody[fieldName] = fieldValue;
@@ -219,6 +266,102 @@ export class RequestExecutor {
     }
 
     return JSON.stringify(resolvedBody);
+  }
+
+  /**
+   * Resolve placeholder using sequential strategy (Option B)
+   * 1st occurrence of any ID placeholder → step 1, 2nd occurrence → step 2, etc.
+   * This handles cases where body uses semantic names ({{professional_area_id}})
+   * but steps extracted generic IDs ([0].id)
+   */
+  private resolvePlaceholderSequential(
+    placeholderName: string,
+    fieldName: string,
+    occurrenceIndex: number,
+    currentStep: WorkflowStep,
+    extractedData: Record<string, unknown>
+  ): unknown {
+    // First, try to find steps that directly extracted this field name
+    let availableSteps = Object.keys(extractedData)
+      .filter(key => key.startsWith('step'))
+      .map(key => {
+        const match = key.match(/step(\d+)_(.+)/);
+        return match ? { stepNum: parseInt(match[1], 10), field: match[2] } : null;
+      })
+      .filter((item): item is { stepNum: number; field: string } => item !== null)
+      .filter(item => item.stepNum < currentStep.stepNumber)
+      .filter(item => item.field === placeholderName)
+      .map(item => item.stepNum)
+      .sort((a, b) => a - b);
+
+    // If no direct match, look for steps that extracted generic IDs ([0].id, id, etc.)
+    // This handles the case where body uses {{professional_area_id}} but step extracted [0].id
+    if (availableSteps.length === 0) {
+      const idPatterns = ['[0].id', '0.id', 'id', '[0].uuid', '0.uuid', 'uuid'];
+
+      availableSteps = Object.keys(extractedData)
+        .filter(key => key.startsWith('step'))
+        .map(key => {
+          const match = key.match(/step(\d+)_(.+)/);
+          return match ? { stepNum: parseInt(match[1], 10), field: match[2] } : null;
+        })
+        .filter((item): item is { stepNum: number; field: string } => item !== null)
+        .filter(item => item.stepNum < currentStep.stepNumber)
+        .filter(item => idPatterns.some(pattern => item.field === pattern))
+        .map(item => item.stepNum)
+        .sort((a, b) => a - b);
+
+      log.info(`[CURL-BUILD] Using ID pattern matching for sequential resolution`, {
+        placeholder: placeholderName,
+        idPatterns,
+        matchedSteps: availableSteps,
+      });
+    }
+
+    log.info(`[CURL-BUILD] Sequential resolution lookup`, {
+      placeholder: placeholderName,
+      occurrence: occurrenceIndex,
+      availableStepsWithField: availableSteps,
+      currentStepNumber: currentStep.stepNumber,
+    });
+
+    // Check if we have enough steps for this occurrence
+    if (occurrenceIndex > availableSteps.length) {
+      log.warn(`[CURL-BUILD] Not enough steps for occurrence #${occurrenceIndex}`, {
+        placeholder: placeholderName,
+        availableSteps: availableSteps.length,
+        requestedOccurrence: occurrenceIndex,
+      });
+      return undefined;
+    }
+
+    // Get the step number for this occurrence (1-indexed occurrence → 0-indexed array)
+    const targetStepNum = availableSteps[occurrenceIndex - 1];
+
+    // Try to find the actual extracted field for this step
+    // It could be the exact placeholder name or a generic ID pattern
+    let storageKey = `step${targetStepNum}_${placeholderName}`;
+    if (extractedData[storageKey] === undefined) {
+      // Try generic ID patterns
+      const idPatterns = ['[0].id', '0.id', 'id', '[0].uuid', '0.uuid', 'uuid'];
+      for (const pattern of idPatterns) {
+        const key = `step${targetStepNum}_${pattern}`;
+        if (extractedData[key] !== undefined) {
+          storageKey = key;
+          break;
+        }
+      }
+    }
+
+    log.info(`[CURL-BUILD] Resolved to specific step`, {
+      placeholder: placeholderName,
+      occurrence: occurrenceIndex,
+      targetStep: targetStepNum,
+      storageKey,
+      value: extractedData[storageKey]?.toString()?.substring(0, 50),
+    });
+
+    return extractedData[storageKey];
   }
 
   /**
@@ -252,12 +395,9 @@ export class RequestExecutor {
         const fieldName = field.replace(stepPrefix, '');
         fieldToStepMap[fieldName] = stepNum;
 
-        // Also map semantic name if it's an ID field
-        if (fieldName === 'id') {
-          const semanticField = `step${stepNum}_semantic_id`;
-          if (extractedData[semanticField]) {
-            fieldToStepMap[String(extractedData[semanticField])] = stepNum;
-          }
+        // Also map semantic name if it's an ID field with semantic naming (e.g., professional_area_id)
+        if (fieldName.endsWith('_id')) {
+          fieldToStepMap[fieldName] = stepNum;
         }
       }
     }
@@ -327,7 +467,30 @@ export class RequestExecutor {
     }
 
     for (const field of step.extractFields) {
-      const value = this.extractFieldFromResponse(response, field);
+      let value = this.extractFieldFromResponse(response, field);
+
+      // If direct extraction failed and the field looks like a semantic name (e.g., professional_area_id),
+      // try common ID extraction patterns as fallback.
+      // This handles the case where the LLM uses semantic extractFields names but the API
+      // response uses generic keys like "id" inside array elements.
+      if (value === undefined && field.endsWith('_id')) {
+        const idFallbackPatterns = ['0.id', '[0].id', 'id', '0.uuid', '[0].uuid', 'uuid'];
+        for (const pattern of idFallbackPatterns) {
+          value = this.extractFieldFromResponse(response, pattern);
+          if (value !== undefined) {
+            log.info(
+              `[EXTRACT] Semantic field "${field}" resolved via fallback pattern "${pattern}"`,
+              {
+                step: step.stepNumber,
+                field,
+                fallbackPattern: pattern,
+                value: String(value).substring(0, 100),
+              }
+            );
+            break;
+          }
+        }
+      }
 
       if (value !== undefined) {
         // Store with step prefix
@@ -343,6 +506,16 @@ export class RequestExecutor {
         }
 
         log.debug(`Extracted field`, { step: step.stepNumber, field, value });
+      } else {
+        log.warn(
+          `[EXTRACT] Failed to extract field "${field}" from step ${step.stepNumber} response`,
+          {
+            step: step.stepNumber,
+            field,
+            responseType: typeof response,
+            isArray: Array.isArray(response),
+          }
+        );
       }
     }
   }

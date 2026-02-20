@@ -517,13 +517,85 @@ CORRECT:
 }
 ```
 
+**CRITICAL - Using Semantic Field Names for Multiple Dependencies:**
+
+When a workflow has MULTIPLE dependency fetching steps (e.g., fetching roles, payment_methods, employment_relationships, etc.), you MUST use **semantic field names** in extractFields instead of generic `[0].id`.
+
+**WRONG - All steps use [0].id (they overwrite each other!):**
+```json
+{
+  "steps": [
+    { "stepNumber": 1, "extractFields": ["[0].id"], ... },
+    { "stepNumber": 2, "extractFields": ["[0].id"], ... },
+    { "stepNumber": 3, "extractFields": ["[0].id"], ... }
+  ]
+}
+```
+
+**CORRECT - Use semantic field names:**
+```json
+{
+  "steps": [
+    {
+      "stepNumber": 1,
+      "description": "Fetch professional areas to get ID",
+      "action": { "endpoint": "/professional-areas", "method": "GET", "purpose": "Get professional_area_id" },
+      "extractFields": ["professional_area_id"]
+    },
+    {
+      "stepNumber": 2,
+      "description": "Fetch employment relationships to get ID",
+      "action": { "endpoint": "/employment-relationships", "method": "GET", "purpose": "Get employment_relationship_id" },
+      "extractFields": ["employment_relationship_id"]
+    },
+    {
+      "stepNumber": 3,
+      "description": "Fetch roles to get ID",
+      "action": { "endpoint": "/roles", "method": "GET", "purpose": "Get role_id" },
+      "extractFields": ["role_id"]
+    },
+    {
+      "stepNumber": 4,
+      "description": "Fetch payment methods to get ID",
+      "action": { "endpoint": "/payment-methods", "method": "GET", "purpose": "Get payment_method_id" },
+      "extractFields": ["payment_method_id"]
+    },
+    {
+      "stepNumber": 5,
+      "description": "Create collaborator with extracted IDs",
+      "action": {
+        "endpoint": "/collaborator",
+        "method": "POST",
+        "purpose": "Create collaborator",
+        "body": {
+          "name": "Felipe Rocha",
+          "professional_area_id": "{{professional_area_id}}",
+          "employment_relationship_id": "{{employment_relationship_id}}",
+          "role_id": "{{role_id}}",
+          "payment_method_id": "{{payment_method_id}}"
+        }
+      }
+    }
+  ]
+}
+```
+
+**RULE:** The placeholder in the body (`{{field_name}}`) MUST match the extractFields value exactly.
+
+**Mapping Guidelines:**
+- If endpoint is `/professional-areas` → use `professional_area_id` (singular form, append `_id`)
+- If endpoint is `/roles` → use `role_id`
+- If endpoint is `/payment-methods` → use `payment_method_id`
+- If endpoint is `/employment-relationships` → use `employment_relationship_id`
+- If endpoint is `/type-services` → use `type_service_id`
+
 **Example - Creating with Mock Data and Dependencies:**
 User: "Create a collaborator named Felipe Rocha, mock the rest"
 Steps needed:
-1. GET /payment_methods - extract first payment method ID
-2. GET /roles - extract first role ID
-3. GET /employment_relationships - extract first relationship ID
-4. GET /professional_areas - extract first area ID
+1. GET /professional-areas - extractFields: `["professional_area_id"]`
+2. GET /employment-relationships - extractFields: `["employment_relationship_id"]`
+3. GET /roles - extractFields: `["role_id"]`
+4. GET /payment-methods - extractFields: `["payment_method_id"]`
 5. POST /collaborator with real extracted IDs + mock data for other fields
 
 **Example - Creating Patient with Foreign Key:**
