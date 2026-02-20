@@ -117,13 +117,15 @@ export class CleanupService {
    */
   async runFullCleanup(): Promise<CleanupResult> {
     try {
+      // Get stats BEFORE any deletions (important: cascade deletes happen during cleanup)
+      const beforeStats = await this.getStats();
+
       const deletedSessions = await this.cleanupSessions();
       const deletedWorkflows = await this.cleanupWorkflows();
 
-      // Count messages that were cascade deleted
-      const beforeStats = await this.getStats();
-      await this.vacuumDatabase();
+      // Get stats AFTER deletions to calculate cascade-deleted messages
       const afterStats = await this.getStats();
+      await this.vacuumDatabase();
 
       const deletedMessages = Math.max(0, beforeStats.messagesCount - afterStats.messagesCount);
 
