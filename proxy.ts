@@ -38,19 +38,34 @@ export async function proxy(request: NextRequest) {
     });
 
     if (!rateLimitResult.allowed) {
+      const windowMinutes = Math.ceil(rateLimitResult.windowMs / 60000);
+      const endpointName = getEndpointFriendlyName(pathname, method);
+
       log.warn('Rate limit exceeded', {
         ip,
         path: pathname,
         method,
         retryAfter: rateLimitResult.retryAfter,
+        limit: rateLimitResult.limit,
+        windowMinutes,
       });
+
+      const message = endpointName
+        ? `Rate limit exceeded for ${endpointName}. You can make ${rateLimitResult.limit} requests per ${windowMinutes} minute(s). Please try again in ${rateLimitResult.retryAfter} seconds.`
+        : `Too many requests. Please try again in ${rateLimitResult.retryAfter} seconds.`;
 
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'RATE_LIMIT_EXCEEDED',
-            message: `Too many requests. Please try again in ${rateLimitResult.retryAfter} seconds.`,
+            message,
+            details: {
+              endpoint: endpointName || 'default',
+              limit: rateLimitResult.limit,
+              windowMinutes,
+              retryAfter: rateLimitResult.retryAfter,
+            },
           },
           retry: {
             allowed: false,
@@ -63,6 +78,7 @@ export async function proxy(request: NextRequest) {
             'Retry-After': String(rateLimitResult.retryAfter),
             'X-RateLimit-Limit': String(rateLimitResult.limit),
             'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+            'X-RateLimit-Window': String(windowMinutes),
           },
         }
       );
@@ -132,6 +148,22 @@ export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
   return response;
+}
+
+function getEndpointFriendlyName(path: string, method: string): string | null {
+  if (path.startsWith('/api/chat') && method === 'POST') {
+    return 'chat';
+  }
+  if (path === '/api/workflow' && method === 'POST') {
+    return 'workflow creation';
+  }
+  if (path.match(/^\/api\/workflow\/[^/]+\/execute/) && method === 'POST') {
+    return 'workflow execution';
+  }
+  if (path.startsWith('/api/session') && ['POST', 'PATCH', 'DELETE'].includes(method)) {
+    return 'session management';
+  }
+  return null;
 }
 
 function getClientIP(request: NextRequest): string {
