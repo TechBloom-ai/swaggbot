@@ -86,7 +86,19 @@ export async function POST(request: NextRequest) {
 
     log.info('Processing chat message', { sessionId, messageLength: message.length });
 
-    // Process message
+    // Try streaming first (for workflows)
+    const streamResult = await chatService.processMessageStreaming({ sessionId, message });
+    if (streamResult) {
+      return new Response(streamResult.stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      });
+    }
+
+    // Non-streaming fallback for regular responses
     const response = await chatService.processMessage({ sessionId, message });
 
     log.info('Chat message processed', {

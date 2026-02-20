@@ -15,6 +15,7 @@ export interface RequestContext {
 
 export interface ExecutionOptions {
   workflowId?: string;
+  onStepStart?: (step: number, description: string, totalSteps: number) => void | Promise<void>;
   onStepComplete?: (step: number, result: StepResult) => void | Promise<void>;
   onAuthSuccess?: (token: string, tokenPath?: string) => void | Promise<void>;
 }
@@ -50,6 +51,11 @@ export class RequestExecutor {
     const extractedData: Record<string, unknown> = {};
 
     for (const step of steps) {
+      // Emit step start event
+      if (this.options?.onStepStart) {
+        await this.options.onStepStart(step.stepNumber, step.description, steps.length);
+      }
+
       const result = await this.executeStep(step, steps, extractedData);
       results.push(result);
 
@@ -58,6 +64,12 @@ export class RequestExecutor {
           `[WORKFLOW] Step ${step.stepNumber} failed`,
           new Error(result.error || 'Unknown error')
         );
+
+        // Emit step complete (failed) event
+        if (this.options?.onStepComplete) {
+          await this.options.onStepComplete(step.stepNumber, result);
+        }
+
         return {
           success: false,
           steps: results,

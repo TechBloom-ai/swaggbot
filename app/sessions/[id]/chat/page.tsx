@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Send, Bot, User, ArrowLeft, Terminal, CheckCircle, XCircle, Settings } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
+import { WorkflowProgressState, WorkflowStepProgress } from '@/lib/types';
+import { WorkflowProgress } from '@/components/workflow';
 import { useChatStore } from '@/stores/chatStore';
 import { ChatPageSkeleton, Spinner, EmptyState } from '@/components/ui';
 import { toast } from '@/stores/toastStore';
@@ -28,6 +30,7 @@ export default function ChatPage() {
   const allMessages = useChatStore(state => state.messages);
   const messages = useMemo(() => allMessages[sessionId] || [], [allMessages, sessionId]);
   const addMessage = useChatStore(state => state.addMessage);
+  const updateMessage = useChatStore(state => state.updateMessage);
   const loadMessages = useChatStore(state => state.loadMessages);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -73,12 +76,34 @@ export default function ChatPage() {
         // Handle both old format and new format
         const messagesData = result.data?.messages || result.messages || [];
         if (messagesData.length > 0) {
-          // Parse metadata from JSON strings
+          // Parse metadata from JSON strings and reconstruct workflow progress
           const parsedMessages = messagesData.map(
-            (msg: { id: string; role: string; content: string; metadata?: string }) => ({
-              ...msg,
-              metadata: msg.metadata ? JSON.parse(msg.metadata) : undefined,
-            })
+            (msg: { id: string; role: string; content: string; metadata?: string }) => {
+              const metadata = msg.metadata ? JSON.parse(msg.metadata) : undefined;
+
+              // Reconstruct workflowProgress from saved result for workflow messages
+              if (
+                metadata?.type === 'workflow_result' &&
+                Array.isArray(metadata.result) &&
+                !metadata.workflowProgress
+              ) {
+                const steps: WorkflowStepProgress[] = metadata.result.map(
+                  (r: { step: number; description: string; success: boolean; error?: string }) => ({
+                    step: r.step,
+                    description: r.description,
+                    status: r.success ? ('completed' as const) : ('failed' as const),
+                    error: r.error,
+                  })
+                );
+                metadata.workflowProgress = {
+                  phase: steps.every(s => s.status === 'completed') ? 'completed' : 'error',
+                  totalSteps: steps.length,
+                  steps,
+                };
+              }
+
+              return { ...msg, metadata };
+            }
           );
           loadMessages(sessionId, parsedMessages);
         }
@@ -116,6 +141,13 @@ export default function ChatPage() {
         }),
       });
 
+      // Check if it's a SSE stream (workflow)
+      const contentType = response.headers.get('Content-Type') || '';
+      if (contentType.includes('text/event-stream')) {
+        await handleWorkflowStream(response);
+        return;
+      }
+
       const result = await response.json();
       // Handle both old format and new format
       const data = result.data || result;
@@ -148,6 +180,220 @@ export default function ChatPage() {
       setIsLoading(false);
     }
   };
+
+  /**
+   * Process a single SSE event and update the workflow message
+   */
+  const processWorkflowEvent = useCallback(
+    (messageId: string, event: Record<string, unknown>) => {
+      // We need to read current state to build incremental updates
+      const currentMessages = useChatStore.getState().messages[sessionId] || [];
+      const currentMsg = currentMessages.find(m => m.id === messageId);
+      const currentProgress: WorkflowProgressState = currentMsg?.metadata?.workflowProgress || {
+        phase: 'planning',
+        totalSteps: 0,
+        steps: [],
+      };
+
+      let updatedProgress: WorkflowProgressState;
+
+      switch (event.type) {
+        case 'planning':
+          updatedProgress = {
+            ...currentProgress,
+            phase: 'planning',
+          };
+          break;
+
+        case 'step_start': {
+          const totalSteps = (event.totalSteps as number) || currentProgress.totalSteps;
+          const stepNum = event.step as number;
+          const description = event.description as string;
+
+          // Initialize all pending steps if this is the first step_start
+          let steps = [...currentProgress.steps];
+          if (steps.length === 0 && totalSteps > 0) {
+            steps = Array.from({ length: totalSteps }, (_, i) => ({
+              step: i + 1,
+              description: i + 1 === stepNum ? description : `Step ${i + 1}`,
+              status: 'pending' as const,
+            }));
+          }
+
+          // Update the current step to running
+          steps = steps.map(s =>
+            s.step === stepNum ? { ...s, description, status: 'running' as const } : s
+          );
+
+          updatedProgress = {
+            ...currentProgress,
+            phase: 'executing',
+            totalSteps,
+            steps,
+          };
+          break;
+        }
+
+        case 'step_complete': {
+          const steps = currentProgress.steps.map(s =>
+            s.step === (event.step as number)
+              ? {
+                  ...s,
+                  description: (event.description as string) || s.description,
+                  status: 'completed' as const,
+                  result: event.result,
+                  httpCode: event.httpCode as number | undefined,
+                }
+              : s
+          );
+          updatedProgress = {
+            ...currentProgress,
+            steps,
+          };
+          break;
+        }
+
+        case 'step_failed': {
+          const steps = currentProgress.steps.map(s =>
+            s.step === (event.step as number)
+              ? {
+                  ...s,
+                  description: (event.description as string) || s.description,
+                  status: 'failed' as const,
+                  error: event.error as string,
+                  httpCode: event.httpCode as number | undefined,
+                }
+              : s
+          );
+          updatedProgress = {
+            ...currentProgress,
+            steps,
+          };
+          break;
+        }
+
+        case 'workflow_complete':
+          updatedProgress = {
+            ...currentProgress,
+            phase: 'completed',
+          };
+          updateMessage(sessionId, messageId, {
+            content: (event.message as string) || 'Workflow completed.',
+            metadata: {
+              type: 'workflow_result',
+              executed: event.success as boolean,
+              result: event.result,
+              workflowProgress: updatedProgress,
+            },
+          });
+          return;
+
+        case 'workflow_error':
+          updatedProgress = {
+            ...currentProgress,
+            phase: 'error',
+            error: event.error as string,
+          };
+          updateMessage(sessionId, messageId, {
+            content: (event.error as string) || 'Workflow failed.',
+            metadata: {
+              type: 'workflow_result',
+              executed: false,
+              workflowProgress: updatedProgress,
+            },
+          });
+          return;
+
+        default:
+          return;
+      }
+
+      updateMessage(sessionId, messageId, {
+        metadata: {
+          type: 'workflow_result',
+          workflowProgress: updatedProgress,
+        },
+      });
+    },
+    [sessionId, updateMessage]
+  );
+
+  /**
+   * Handle SSE stream for real-time workflow progress
+   */
+  const handleWorkflowStream = useCallback(
+    async (response: Response) => {
+      // Create a placeholder assistant message with workflow progress
+      const messageId = crypto.randomUUID();
+      const initialProgress: WorkflowProgressState = {
+        phase: 'planning',
+        totalSteps: 0,
+        steps: [],
+      };
+
+      addMessage(sessionId, {
+        id: messageId,
+        role: 'assistant',
+        content: 'Executing workflow...',
+        metadata: {
+          type: 'workflow_result',
+          workflowProgress: initialProgress,
+        },
+      });
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          // Keep the last potentially incomplete line in the buffer
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) {
+              continue;
+            }
+
+            try {
+              const event = JSON.parse(line.slice(6));
+              processWorkflowEvent(messageId, event);
+            } catch {
+              // Skip malformed events
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Stream reading error:', error);
+        updateMessage(sessionId, messageId, {
+          content: 'Workflow execution encountered a connection error.',
+          metadata: {
+            type: 'workflow_result',
+            workflowProgress: {
+              phase: 'error',
+              totalSteps: 0,
+              steps: [],
+              error: 'Connection lost during workflow execution.',
+            },
+          },
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId, addMessage, updateMessage, processWorkflowEvent]
+  );
 
   if (isLoadingSession) {
     return <ChatPageSkeleton />;
@@ -249,11 +495,26 @@ export default function ChatPage() {
                         message.role === 'user' ? 'text-white' : 'text-[var(--color-logic-navy)]'
                       }`}
                     >
-                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                      {/* Hide placeholder text during live streaming, show final content */}
+                      {!(
+                        message.metadata?.workflowProgress &&
+                        (message.metadata.workflowProgress.phase === 'planning' ||
+                          message.metadata.workflowProgress.phase === 'executing')
+                      ) && <ReactMarkdown>{message.content}</ReactMarkdown>}
                     </div>
 
-                    {/* Curl Command Display */}
-                    {message.metadata?.curl && (
+                    {/* Workflow Progress Display */}
+                    {message.metadata?.workflowProgress && (
+                      <div className='mt-2'>
+                        <WorkflowProgress
+                          progress={message.metadata.workflowProgress}
+                          result={message.metadata.result}
+                        />
+                      </div>
+                    )}
+
+                    {/* Curl Command Display (non-workflow only) */}
+                    {message.metadata?.curl && message.metadata?.type !== 'workflow_result' && (
                       <div className='mt-3 rounded bg-gray-900 p-2 sm:p-3 overflow-x-auto'>
                         <div className='mb-2 flex items-center gap-2 text-xs text-gray-400'>
                           <Terminal className='h-3 w-3' />
@@ -265,21 +526,25 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {message.metadata?.executed === true ? (
+                    {message.metadata?.type !== 'workflow_result' &&
+                    message.metadata?.executed === true ? (
                       <div className='mt-2 flex items-center gap-2'>
                         <CheckCircle className='h-4 w-4 text-[var(--color-circuit-green)]' />
                         <span className='text-xs text-[var(--color-circuit-green)]'>
                           Executed successfully
                         </span>
                       </div>
-                    ) : message.metadata?.executed === false ? (
+                    ) : message.metadata?.type !== 'workflow_result' &&
+                      message.metadata?.executed === false ? (
                       <div className='mt-2 flex items-center gap-2'>
                         <XCircle className='h-4 w-4 text-red-500' />
                         <span className='text-xs text-red-500'>Execution failed</span>
                       </div>
                     ) : null}
 
-                    {message.metadata?.result !== null && message.metadata?.result !== undefined ? (
+                    {message.metadata?.type !== 'workflow_result' &&
+                    message.metadata?.result !== null &&
+                    message.metadata?.result !== undefined ? (
                       <div className='mt-3 max-h-48 sm:max-h-64 overflow-auto rounded bg-[var(--color-background-alt)] p-2 sm:p-3'>
                         <pre className='text-xs text-[var(--color-text-secondary)]'>
                           {(() => {

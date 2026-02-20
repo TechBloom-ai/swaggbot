@@ -1,6 +1,6 @@
 import { getLLMProvider } from '@/lib/llm';
 import { executeCurl, validateCurlCommand } from '@/lib/utils/curl';
-import { ChatResponse, LLMMessage } from '@/lib/types';
+import { ChatResponse, LLMMessage, WorkflowStep } from '@/lib/types';
 import { Message } from '@/lib/db/schema';
 import { log } from '@/lib/logger';
 
@@ -8,6 +8,25 @@ import { RequestExecutor } from './request-executor';
 import { sessionService } from './session';
 import { tokenExtractorService } from './tokenExtractor';
 import { messageService } from './message';
+
+// SSE event types for workflow streaming
+export interface WorkflowStreamEvent {
+  type:
+    | 'planning'
+    | 'step_start'
+    | 'step_complete'
+    | 'step_failed'
+    | 'workflow_complete'
+    | 'workflow_error';
+  step?: number;
+  totalSteps?: number;
+  description?: string;
+  success?: boolean;
+  result?: unknown;
+  error?: string;
+  message?: string;
+  httpCode?: number;
+}
 
 export interface ChatInput {
   sessionId: string;
@@ -470,6 +489,200 @@ export class ChatService {
       explanation:
         "I'm Swaggbot, your API assistant! I help you interact with APIs using natural language. I can generate curl commands, execute API calls, and answer questions about your API's structure. Just tell me what you want to do, like 'get all users' or 'create a new product'.",
     };
+  }
+
+  /**
+   * Process a message and return a SSE stream if it's a workflow, or null if it's a regular response.
+   * This allows the API route to decide between streaming and non-streaming responses.
+   */
+  async processMessageStreaming(input: ChatInput): Promise<{ stream: ReadableStream } | null> {
+    // Get session
+    const session = await sessionService.findById(input.sessionId);
+    if (!session) {
+      return null;
+    }
+
+    // Update last accessed
+    await sessionService.updateLastAccessed(input.sessionId);
+
+    // Load history
+    let history: LLMMessage[] = [];
+    try {
+      const recentMessagesResult = await messageService.getRecentMessages(
+        input.sessionId,
+        undefined,
+        10
+      );
+      history = this.convertMessagesToLLMFormat(recentMessagesResult.messages);
+      await messageService.create({
+        sessionId: input.sessionId,
+        role: 'user',
+        content: input.message,
+      });
+    } catch (error) {
+      log.error('Failed to load history or save user message (streaming)', error);
+      return null;
+    }
+
+    // Check workflow reference
+    const workflowReference = await this.detectWorkflowReference(input.message, history);
+    if (workflowReference.shouldReexecute) {
+      return null;
+    }
+
+    // Classify intent
+    const intent = await this.getLLM().classifyIntent(input.message, history);
+    if (intent.type !== 'workflow') {
+      return null;
+    }
+
+    // It's a workflow — return a stream
+    const formattedSwagger = sessionService.getFormattedSwagger(session);
+
+    const stream = new ReadableStream({
+      start: async controller => {
+        const encoder = new TextEncoder();
+        const send = (event: WorkflowStreamEvent) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        };
+
+        try {
+          // Phase 1: Planning
+          send({ type: 'planning', message: 'Planning workflow steps...' });
+
+          let steps: WorkflowStep[];
+          try {
+            steps = await this.getLLM().planWorkflow(
+              formattedSwagger,
+              input.message,
+              !!session.authToken
+            );
+          } catch (planError) {
+            send({
+              type: 'workflow_error',
+              error: `Failed to plan workflow: ${planError instanceof Error ? planError.message : 'Unknown error'}`,
+            });
+            controller.close();
+            return;
+          }
+
+          if (!steps || steps.length === 0) {
+            send({ type: 'workflow_error', error: 'Could not plan workflow. No steps generated.' });
+            controller.close();
+            return;
+          }
+
+          // Validate foreign keys
+          const postSteps = steps.filter(s => s.action.method?.toUpperCase() === 'POST');
+          for (const postStep of postSteps) {
+            const missingForeignKeySteps = this.validateForeignKeySteps(
+              postStep,
+              steps,
+              formattedSwagger
+            );
+            if (missingForeignKeySteps.length > 0) {
+              send({
+                type: 'workflow_error',
+                error: `Workflow planning error: Missing foreign key fetching steps for ${postStep.action.endpoint}. Missing: ${missingForeignKeySteps.join(', ')}.`,
+              });
+              controller.close();
+              return;
+            }
+          }
+
+          // Phase 2: Execute steps with streaming progress
+          const executor = new RequestExecutor(
+            {
+              baseUrl: session.baseUrl || '',
+              authToken: session.authToken || undefined,
+            },
+            {
+              onStepStart: async (stepNum, description, totalSteps) => {
+                send({
+                  type: 'step_start',
+                  step: stepNum,
+                  totalSteps,
+                  description,
+                });
+              },
+              onStepComplete: async (stepNum, result) => {
+                if (result.success) {
+                  send({
+                    type: 'step_complete',
+                    step: stepNum,
+                    totalSteps: steps.length,
+                    description: result.description,
+                    success: true,
+                    result: result.response,
+                    httpCode: result.httpCode,
+                  });
+                } else {
+                  send({
+                    type: 'step_failed',
+                    step: stepNum,
+                    totalSteps: steps.length,
+                    description: result.description,
+                    success: false,
+                    error: result.error,
+                    httpCode: result.httpCode,
+                  });
+                }
+              },
+            }
+          );
+
+          const execResult = await executor.executeSteps(steps);
+
+          // Phase 3: Complete
+          const results = execResult.steps.map(step => ({
+            step: step.step,
+            description: step.description,
+            success: step.success,
+            result: step.response,
+            error: step.error,
+          }));
+
+          send({
+            type: 'workflow_complete',
+            success: execResult.success,
+            message: execResult.success
+              ? `Workflow completed successfully with ${results.length} steps.`
+              : `Workflow failed at step ${results.find(r => !r.success)?.step}.`,
+            result: results,
+          });
+
+          // Save assistant message
+          try {
+            const content = execResult.success
+              ? `Workflow completed successfully with ${results.length} steps.`
+              : `Workflow failed at step ${results.find(r => !r.success)?.step}: ${results.find(r => !r.success)?.error || 'Unknown error'}`;
+
+            await messageService.create({
+              sessionId: input.sessionId,
+              role: 'assistant',
+              content,
+              metadata: JSON.stringify({
+                type: 'workflow_result',
+                executed: execResult.success,
+                result: results,
+              }),
+            });
+          } catch (error) {
+            log.error('Failed to save workflow assistant message', error);
+          }
+        } catch (error) {
+          log.error('Workflow stream error', error);
+          send({
+            type: 'workflow_error',
+            error: error instanceof Error ? error.message : 'Workflow execution failed',
+          });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return { stream };
   }
 
   private async handleWorkflow(
