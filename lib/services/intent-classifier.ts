@@ -96,20 +96,7 @@ export class IntentClassifier {
    */
   hasExplicitExecutionIntent(message: string): boolean {
     const lowerMessage = message.toLowerCase();
-    const executionWords = [
-      'execute',
-      'run',
-      'test',
-      'try',
-      'call',
-      'send',
-      'fazer',
-      'listar',
-      'buscar',
-      'criar',
-      'pegar',
-      'obter',
-    ];
+    const executionWords = ['execute', 'run', 'test', 'try', 'call', 'send'];
 
     return executionWords.some(word => lowerMessage.includes(word));
   }

@@ -305,13 +305,7 @@ export class ChatService {
         lowerMessage.includes('test') ||
         lowerMessage.includes('try') ||
         lowerMessage.includes('call') ||
-        lowerMessage.includes('send') ||
-        lowerMessage.includes('fazer') ||
-        lowerMessage.includes('listar') ||
-        lowerMessage.includes('buscar') ||
-        lowerMessage.includes('criar') ||
-        lowerMessage.includes('pegar') ||
-        lowerMessage.includes('obter');
+        lowerMessage.includes('send');
 
       const shouldActuallyExecute = curlResult.shouldExecute || explicitlyAskedToExecute;
 
