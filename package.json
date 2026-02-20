@@ -22,7 +22,8 @@
     "db:studio": "drizzle-kit studio",
     "prepare": "husky",
     "docker:build": "docker-compose build swaggbot-web && docker-compose build swaggbot-mcp",
-    "docker:web": "docker-compose up -d swaggbot-web"
+    "docker:web": "docker-compose up -d swaggbot-web",
+    "changelog": "git-cliff --output CHANGELOG.md"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

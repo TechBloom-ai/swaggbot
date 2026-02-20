@@ -1,0 +1,48 @@
+# git-cliff ~ configuration file
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+"""
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}
+    {% endfor %}
+{% endfor %}
+"""
+trim = true
+render_always = true
+output = "CHANGELOG.md"
+
+[git]
+conventional_commits = false
+filter_unconventional = false
+require_conventional = false
+commit_parsers = [
+    { message = "(?i)^(add|implement|create|new|introduce)", group = "<!-- 0 -->Added" },
+    { message = "(?i)^(update|change|modify|improve|enhance|refactor)", group = "<!-- 1 -->Changed" },
+    { message = "(?i)^(deprecate|obsolete)", group = "<!-- 2 -->Deprecated" },
+    { message = "(?i)^(remove|delete|drop|cleanup|clean up)", group = "<!-- 3 -->Removed" },
+    { message = "(?i)^(fix|bug|correct|repair|solve|resolve|patch)", group = "<!-- 4 -->Fixed" },
+    { message = "(?i)^(security|vulnerability|vuln|secure|protect|safe)", group = "<!-- 5 -->Security" },
+    { message = "(?i)^(test|spec|testing)", group = "<!-- 6 -->Tests" },
+    { message = "(?i)^(doc|readme|comment|license|contributing)", group = "<!-- 7 -->Documentation" },
+    { message = "(?i)^(build|ci|workflow|action|docker|deploy)", group = "<!-- 8 -->Infrastructure" },
+    { message = "(?i)^(release|version|bump|tag)", group = "<!-- 9 -->Release" },
+    { message = ".*", group = "<!-- 10 -->Other" },
+]
+filter_commits = false
+sort_commits = "oldest"
