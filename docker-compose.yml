@@ -61,6 +61,7 @@ services:
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - RUNNING_IN_DOCKER=true
     volumes:
       - swaggbot-data:/app/data
